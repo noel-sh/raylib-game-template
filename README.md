@@ -1,6 +1,6 @@
 -----------------------------------
 <br>
-[![Windows](https://github.com/raysan5/raylib/workflows/Windows/badge.svg)](https://github.com/raysan5/raylib/actions?query=workflow%3AWindows)
+[![Windows](https://github.com/noel-sh/raylib-game-template/workflows/Windows/badge.svg)](https://github.com/noel-sh/raylib-game-template/actions?query=workflow%3AWindows)
 <br>
 -----------------------------------
 
