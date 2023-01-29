@@ -25,12 +25,14 @@
 
 #include "raylib.h"
 #include "screens.h"
+#include "ldtk.h"
 
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)
 //----------------------------------------------------------------------------------
 static int framesCounter = 0;
 static int finishScreen = 0;
+static struct ldtk_world* world = NULL;
 
 //----------------------------------------------------------------------------------
 // Gameplay Screen Functions Definition
@@ -42,6 +44,8 @@ void InitGameplayScreen(void)
     // TODO: Initialize GAMEPLAY screen variables here!
     framesCounter = 0;
     finishScreen = 0;
+
+    world = ldtk_load_world("resources/testworld.ldtk");
 }
 
 // Gameplay Screen Update logic
@@ -71,6 +75,8 @@ void DrawGameplayScreen(void)
 void UnloadGameplayScreen(void)
 {
     // TODO: Unload GAMEPLAY screen variables here!
+
+    ldtk_destroy_world(world);
 }
 
 // Gameplay Screen should finish?

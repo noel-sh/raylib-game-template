@@ -351,9 +351,13 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\src\external\parson.h" />
+    <ClInclude Include="..\..\..\src\ldtk.h" />
     <ClInclude Include="..\..\..\src\screens.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\src\external\parson.c" />
+    <ClCompile Include="..\..\..\src\ldtk.c" />
     <ClCompile Include="..\..\..\src\raylib_game.c" />
     <ClCompile Include="..\..\..\src\screen_logo.c" />
     <ClCompile Include="..\..\..\src\screen_title.c" />
