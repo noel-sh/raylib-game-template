@@ -37,10 +37,12 @@ jobs:
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v1.0.2
 
+    - name: Restore NuGet packages
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: nuget restore ${{env.SOLUTION_FILE_PATH}}
+      
     - name: Build
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: |
-        pushd main/projects/VS2022
-        msbuild.exe raylib-game-template.sln /target:raylib /property:Configuration=Release /property:Platform=x64
-        msbuild.exe raylib-game-template.sln /target:raylib /property:Configuration=Release.DLL /property:Platform=x64
-        popd
+        msbuild.exe ${{env.SOLUTION_FILE_PATH}} /target:raylib /property:Configuration=Release /property:Platform=x64
+        msbuild.exe ${{env.SOLUTION_FILE_PATH}} /target:raylib /property:Configuration=Release.DLL /property:Platform=x64
