@@ -35,7 +35,7 @@ jobs:
     - name: Checkout raylib side by side
       uses: actions/checkout@v3
       with:
-        repository: raysan5/raylib
+        repository: noel-sh/raylib
         path: raylib
 
     - name: Add MSBuild to PATH
