@@ -8,7 +8,7 @@ on:
 
 env:
   # Path to the solution file relative to the root of the project.
-  SOLUTION_FILE_PATH: projects/
+  SOLUTION_FILE_PATH: projects/VS2022/raylib-game-template.sln
 
   # Configuration type to build.
   # You can convert this to a build matrix if you need coverage of multiple configuration types.
@@ -35,6 +35,7 @@ jobs:
     - name: Build
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: |
-        cd projects/VS2022
+        pushd projects/VS2022
         msbuild.exe raylib-game-template.sln /target:raylib /property:Configuration=Release /property:Platform=x64
         msbuild.exe raylib-game-template.sln /target:raylib /property:Configuration=Release.DLL /property:Platform=x64
+        popd
