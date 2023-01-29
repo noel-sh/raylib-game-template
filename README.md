@@ -1,4 +1,8 @@
 -----------------------------------
+<br>
+[![Windows](https://github.com/raysan5/raylib/workflows/Windows/badge.svg)](https://github.com/raysan5/raylib/actions?query=workflow%3AWindows)
+<br>
+-----------------------------------
 
 _DISCLAIMER:_
 
