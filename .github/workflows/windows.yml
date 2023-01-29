@@ -2,9 +2,13 @@ name: Windows
 
 on:
   push:
-    branches: [ "main" ]
+    paths:
+      - 'src/**'
+      - '.github/workflows/windows.yml'
   pull_request:
-    branches: [ "main" ]
+    paths:
+      - 'src/**'
+      - '.github/workflows/windows.yml'
 
 env:
   # Path to the solution file relative to the root of the project.
