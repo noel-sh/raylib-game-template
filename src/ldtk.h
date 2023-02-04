@@ -4,7 +4,7 @@
 
 struct ldtk_world;
 
-struct ldtk_level
+typedef struct ldtk_level
 {
 	const char* identifier;
 	int uid;
@@ -15,9 +15,9 @@ struct ldtk_level
 	int pxHei;
 	int layer_instances_count;
 	struct ldtk_layer_instance* layer_instances;
-};
+} ldtk_level;
 
-struct ldtk_tileset
+typedef struct ldtk_tileset
 {
 	const char* identifier;
 	int uid;
@@ -28,9 +28,9 @@ struct ldtk_tileset
 	int spacing;
 	int padding;
 	void* userdata;
-};
+} ldtk_tileset;
 
-struct ldtk_layer_instance
+typedef struct ldtk_layer_instance
 {
 	const char* identifier;
 	const char* type;
@@ -52,9 +52,9 @@ struct ldtk_layer_instance
 	int* int_grid;
 
 	struct ldtk_tileset* tileset;
-};
+} ldtk_layer_instance;
 
-struct ldtk_tile
+typedef struct ldtk_tile
 {
 	int px_x;
 	int px_y;
@@ -62,7 +62,7 @@ struct ldtk_tile
 	int src_y;
 	int f;
 	int t;
-};
+} ldtk_tile;
 
 
 #if defined(__cplusplus)

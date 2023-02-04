@@ -69,7 +69,7 @@ int main(void)
     fxCoin = LoadSound("resources/coin.wav");
 
     SetMusicVolume(music, 1.0f);
-    PlayMusicStream(music);
+    //PlayMusicStream(music);
 
     // Setup and init first screen
     currentScreen = LOGO;
@@ -80,6 +80,9 @@ int main(void)
 #else
     SetTargetFPS(60);       // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
+
+    // Skip straight to gameplay
+    TransitionToScreen(GAMEPLAY);
 
     // Main game loop
     while (!WindowShouldClose())    // Detect window close button or ESC key
