@@ -26,6 +26,11 @@
 #include "raylib.h"
 #include "screens.h"
 #include "ldtk.h"
+
+#define RAYLIB_ASEPRITE_IMPLEMENTATION
+#include "raylib-aseprite.h"
+
+
 #include <stdio.h>
 
 //----------------------------------------------------------------------------------
@@ -35,6 +40,7 @@ static int framesCounter = 0;
 static int finishScreen = 0;
 static struct ldtk_world* world = NULL;
 static Texture worldTextures[16] = { 0 };
+static Aseprite worldSprites[16] = { 0 };
 static Vector2 cameraOffset = { 0 };
 static float cameraZoom = 1.0f;
 static int worldDepthToShow = 0;
@@ -50,7 +56,7 @@ void InitGameplayScreen(void)
     framesCounter = 0;
     finishScreen = 0;
 
-    world = ldtk_load_world("resources/WorldMap_GridVania_layout.ldtk");
+    world = ldtk_load_world("resources/WorldMap_Free_layout.ldtk");
 
 	if (world)
 	{
@@ -63,8 +69,18 @@ void InitGameplayScreen(void)
 		{
 			struct ldtk_tileset* tileset = ldtk_get_tileset(world, i);
 			sprintf(texturePath, "resources/%s", tileset->relPath);
-            worldTextures[i] = LoadTexture(texturePath);
-			tileset->userdata = &worldTextures[i];
+
+			if (strstr(texturePath, ".aseprite"))
+			{
+				worldSprites[i] = LoadAseprite(texturePath);
+				worldTextures[i] = GetAsepriteTexture(worldSprites[i]);
+				tileset->userdata = &worldTextures[i];
+			}
+			else
+			{
+				worldTextures[i] = LoadTexture(texturePath);
+				tileset->userdata = &worldTextures[i];
+			}
 		}
 	}
 }
@@ -194,6 +210,12 @@ void DrawGameplayScreen(void)
 void UnloadGameplayScreen(void)
 {
     // TODO: Unload GAMEPLAY screen variables here!
+
+	for (int i = 0; i < 16; ++i)
+	{
+		UnloadTexture(worldTextures[i]);
+		UnloadAseprite(worldSprites[i]);
+	}
 
     ldtk_destroy_world(world);
 }

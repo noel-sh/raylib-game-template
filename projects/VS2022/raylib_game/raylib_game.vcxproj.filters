@@ -10,10 +10,18 @@
     <ClCompile Include="..\..\..\src\external\parson.c">
       <Filter>external</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\ldtk.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\src\screens.h" />
     <ClInclude Include="..\..\..\src\external\parson.h">
+      <Filter>external</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\ldtk.h" />
+    <ClInclude Include="..\..\..\src\external\cute_aseprite.h">
+      <Filter>external</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\external\raylib-aseprite.h">
       <Filter>external</Filter>
     </ClInclude>
   </ItemGroup>
