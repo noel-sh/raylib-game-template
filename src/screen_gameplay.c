@@ -50,7 +50,7 @@ void InitGameplayScreen(void)
     framesCounter = 0;
     finishScreen = 0;
 
-    world = ldtk_load_world("resources/Typical_TopDown_example.ldtk");
+    world = ldtk_load_world("resources/WorldMap_GridVania_layout.ldtk");
 
 	if (world)
 	{
@@ -65,18 +65,6 @@ void InitGameplayScreen(void)
 			sprintf(texturePath, "resources/%s", tileset->relPath);
             worldTextures[i] = LoadTexture(texturePath);
 			tileset->userdata = &worldTextures[i];
-		}
-
-		// find the highest level depth
-		worldDepthToShow = -999999;
-		int levelCount = ldtk_get_level_count(world);
-		for (int i = 0; i < levelCount; ++i)
-		{
-			int levelDepth = ldtk_get_level(world, i)->worldDepth;
-			if (levelDepth > worldDepthToShow)
-			{
-				worldDepthToShow = levelDepth;
-			}
 		}
 	}
 }
@@ -151,7 +139,6 @@ void DrawLevels()
 					}
 
 					DrawTexturePro(*tex, src, dst, (Vector2){0.0f, 0.0f}, 0.0f, WHITE);
-					//DrawTextureRec(*tex, src, dst, WHITE);
 				}
 			}
 
@@ -165,8 +152,8 @@ void UpdateGameplayScreen(void)
     // TODO: Update GAMEPLAY screen variables here!
 	if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
 	{
-		cameraOffset.x += GetMouseDelta().x;
-		cameraOffset.y += GetMouseDelta().y;
+		cameraOffset.x += GetMouseDelta().x / cameraZoom;
+		cameraOffset.y += GetMouseDelta().y / cameraZoom;
 	}
 
 	cameraZoom += GetMouseWheelMoveV().y * 0.1f;
@@ -184,8 +171,14 @@ void DrawGameplayScreen(void)
 {
 	DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
 
+	Vector2 target = {
+		-cameraOffset.x,
+		-cameraOffset.y
+	};
+
 	Camera2D camera = { 
-		.offset = cameraOffset,
+		.offset = (Vector2) { GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f },
+		.target = target,
 		.zoom = cameraZoom 
 	};
 	BeginMode2D(camera);
