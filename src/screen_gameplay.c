@@ -26,6 +26,7 @@
 #include "raylib.h"
 #include "screens.h"
 #include "ldtk.h"
+#include "raymath.h"
 
 #define RAYLIB_ASEPRITE_IMPLEMENTATION
 #include "raylib-aseprite.h"
@@ -123,17 +124,17 @@ void DrawLevels()
 // Input
 
 
-typedef struct PlayerInputType
+typedef struct PlayerInput
 {
 	bool bMoveLeft;
 	bool bMoveRight;
 	bool bJump;
-} PlayerInputType;
+} PlayerInput;
 
 
-PlayerInputType GetPlayerInput()
+PlayerInput GetPlayerInput()
 {
-	PlayerInputType input;
+	PlayerInput input;
 	memset(&input, 0, sizeof(input));
 
 	if (IsGamepadAvailable(0))
@@ -182,7 +183,7 @@ typedef enum EPlayerJumpState
 	PJS_Falling
 } EPlayerJumpState;
 
-typedef struct PlayerType
+typedef struct Player
 {
 	// runtime vars
 	Vector2 Location;
@@ -195,15 +196,210 @@ typedef struct PlayerType
 
 	// was Jump pressed last frame?
 	bool bJumpPrev;
-} PlayerType;
+} Player;
 
 
 typedef struct GameState
 {
-	PlayerType Player;
-	PlayerInputType Input;
+	Player Player;
+	PlayerInput Input;
 } GameState;
 
+
+
+//////////////////////////////////////////////////////////////////////////
+// some play related config variables - where best to keep these? in a struct?
+
+// player width
+static int gPlayerWidth = 16;
+// player height
+static int gPlayerHeight = 24;
+// max height of jump if player holds the jump button
+static float gPlayerJumpHeight = 32.0f;
+// how many frames to reach peak height?
+static float gPlayerJumpFrames = 20;
+// alternative to JumpFrames - pick a target distance (at max speed)
+static float gPlayerJumpDistance = 180.0f;
+
+// change jump gravity this much when falling (>1 for falling faster)
+static float gPlayerFallGravityScale = 1.0f;
+
+// change jump gravity this much when player releases jump early
+static float gPlayerJumpReleaseGravityScale = 4.0f;
+
+// how many frames to pause at the top of the jump
+static int gPlayerHangTimeFrames = 3;
+
+// 0 - no accel, 1 infinite accel
+static float gPlayerAccelX = 0.8f;
+// max speed pixels/frame
+static float gPlayerMaxSpeedX = 2.0f;
+
+// max speed pixels/frame
+static float gPlayerMaxFallSpeed = 10.0f;
+
+// 2 is double jump
+static int gPlayerMaxJumpCount = 100;
+
+// how many frames of coyote time
+static int gPlayerCoyoteTime = 3;
+
+// track how high the player has jumped
+static float gStat_MaxHeight = 0.0f;
+
+
+void UpdatePlayer(GameState* state)
+{
+	const PlayerInput* input = &state->Input;
+	Player* player = &state->Player;
+
+
+	// take off vertical speed
+	const float v0 = (-2.0f * gPlayerJumpHeight * gPlayerMaxFallSpeed) / gPlayerJumpDistance;
+	// gravity
+	const float G = (2.0f * gPlayerJumpHeight * (gPlayerMaxFallSpeed * gPlayerMaxFallSpeed)) / (gPlayerJumpDistance * gPlayerJumpDistance);
+
+	// transient downward force applied to the player (differs depending on certain conditions)
+	float g = G;
+
+	Vector2 posDelta = { 0 };
+
+	//////////////////////////////////////////////////////////////////////////
+	// horizontal movement
+	float targetSpeedX = 0.0f;
+	if (input->bMoveLeft)
+	{
+		targetSpeedX = -gPlayerMaxSpeedX;
+	}
+	else if (input->bMoveRight)
+	{
+		targetSpeedX = gPlayerMaxSpeedX;
+	}
+
+	// store desired delta of player position in X axis
+	posDelta.x = gPlayerAccelX * targetSpeedX + (1.0f - gPlayerAccelX) * player->Velocity.x;
+	player->Velocity.x = posDelta.x;
+
+
+	//////////////////////////////////////////////////////////////////////////
+	// vertical movement
+
+	// TODO check if player is on the ground (raycast?)
+	// for now collide with the y=0 plane
+	bool bIsGrounded = player->Location.y >= 0.0f;
+
+	if (bIsGrounded)
+	{
+		player->bIsJumping = false;
+		player->JumpCount = 0;
+		player->JumpState = PJS_None;
+		player->JumpStateTime = 0;
+		player->NotGroundedTime = 0;
+		player->Velocity.y = 0.0f;
+	}
+	else
+	{
+		player->NotGroundedTime++;
+		if (!player->bIsJumping && player->JumpState == 0)
+		{
+			// player walked off an edge?
+			//player->JumpCount = 1;
+			player->JumpState = PJS_Falling;
+		}
+
+		// after N frames clear coyote time by setting JumpCount to 1
+		if (!player->bIsJumping && player->JumpState == 3 && player->JumpCount == 0)
+		{
+			if (player->NotGroundedTime > gPlayerCoyoteTime)
+			{
+				player->JumpCount = 1;
+			}
+		}
+	}
+
+	if (input->bJump && !player->bJumpPrev && player->JumpCount < gPlayerMaxJumpCount)
+	{
+		// start jumping
+		player->bIsJumping = true;
+		player->JumpState = PJS_JumpAscending;
+		player->JumpStateTime = 0;
+		player->JumpCount++;
+
+		// apply initial impulse
+		player->Velocity.y = v0;
+
+		if (bIsGrounded)
+		{
+			// reset max height when we start jumping again
+			gStat_MaxHeight = 0;
+		}
+	}
+
+	switch (player->JumpState)
+	{
+		// no jump
+	case PJS_None:
+		break;
+
+		// ascending
+	case PJS_JumpAscending:
+		if (player->Velocity.y > 0.0f)
+		{
+			// reached the peak
+			player->Velocity.y = 0.0f;
+			player->JumpState = PJS_JumpApex;
+			player->JumpStateTime = 0;
+		}
+
+		// if the player releases the button on the way up, slow them down quicker
+		if (!input->bJump)
+		{
+			g = G * gPlayerJumpReleaseGravityScale;
+		}
+		break;
+
+		// hang time
+	case PJS_JumpApex:
+		player->Velocity.y = 0.0f;
+		g = 0.0f;
+
+		// wait a few frames then move to falling state
+		if (player->JumpStateTime >= gPlayerHangTimeFrames)
+		{
+			player->JumpState = PJS_Falling;
+			player->JumpStateTime = 0;
+		}
+		break;
+
+		// falling
+	case PJS_Falling:
+		if (player->Velocity.y > 0.0f)
+		{
+			g = G * gPlayerFallGravityScale;
+		}
+		break;
+	}
+
+	posDelta.y = player->Velocity.y;// + (g / 2.0f);
+	player->Velocity.y += g;
+
+	// clamp to max speed
+	if (player->Velocity.y > gPlayerMaxFallSpeed)
+	{
+		player->Velocity.y = gPlayerMaxFallSpeed;
+	}
+
+
+
+	// Move player according to desired delta (todo - collide with world!)
+	player->Location = Vector2Add(player->Location, posDelta);
+
+
+	player->JumpStateTime += 1;
+
+	// store if the player had Jump pressed this frame
+	player->bJumpPrev = input->bJump;
+}
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -215,13 +411,13 @@ GameState StepGame(GameState state)
 	GameState newState = state;
 
 	// update player
-	//UpdatePlayer(newState);
+	UpdatePlayer(&newState);
 
 	// track some random stats...
-	//if (gStat_MaxHeight > newState.Player.Location.y)
-	//{
-	//	gStat_MaxHeight = newState.Player.Location.y;
-	//}
+	if (gStat_MaxHeight > newState.Player.Location.y)
+	{
+		gStat_MaxHeight = newState.Player.Location.y;
+	}
 
 	return newState;
 }
@@ -269,7 +465,7 @@ void InitGameplayScreen(void)
 	framesCounter = 0;
 	finishScreen = 0;
 
-	world = ldtk_load_world("resources/WorldMap_Free_layout.ldtk");
+	//world = ldtk_load_world("resources/WorldMap_Free_layout.ldtk");
 
 	if (world)
 	{
@@ -445,7 +641,7 @@ void DrawDebugUI()
 	x += 64;
 
 	// show player inputs
-	PlayerInputType* input = &gGameStates[gCurrentFrame].Input;
+	PlayerInput* input = &gGameStates[gCurrentFrame].Input;
 	x += 16;
 	input->bJump = GuiCheckBox((Rectangle) { x, y, 16, 16 }, "Jump", input->bJump);
 	y += 16;
@@ -473,6 +669,15 @@ void DrawDebugUI()
 }
 
 
+static void DrawPlayer(GameState state)
+{
+	int pw = gPlayerWidth;
+	int ph = gPlayerHeight;
+	int px = (int)state.Player.Location.x - (pw / 2);
+	int py = (int)state.Player.Location.y - ph;
+	DrawRectangle(px, py, pw, ph, RAYWHITE);
+}
+
 
 // Gameplay Screen Draw logic
 void DrawGameplayScreen(void)
@@ -491,6 +696,8 @@ void DrawGameplayScreen(void)
 	};
 	BeginMode2D(camera);
 		DrawLevels();
+
+		DrawPlayer(gGameStates[gCurrentFrame]);
 	EndMode2D();
 
 	DrawDebugUI();
@@ -500,6 +707,7 @@ void DrawGameplayScreen(void)
     //DrawText("PRESS ENTER or TAP to JUMP to ENDING SCREEN", 130, 220, 20, MAROON);
 
 	DrawFPS(GetScreenWidth() - 100, 10);
+	DrawText(TextFormat("Height: %f", -gStat_MaxHeight), GetScreenWidth() - 200, 60, 10, RAYWHITE);
 }
 
 // Gameplay Screen Unload logic
