@@ -30,6 +30,9 @@
 #define RAYLIB_ASEPRITE_IMPLEMENTATION
 #include "raylib-aseprite.h"
 
+#define RAYGUI_IMPLEMENTATION
+#include "external/raygui.h"
+
 
 #include <stdio.h>
 
@@ -205,12 +208,6 @@ typedef struct GameState
 
 //////////////////////////////////////////////////////////////////////////
 
-void InitGame(GameState* state)
-{
-	memset(state, 0, sizeof(state));
-	state->Player.Location = (Vector2){ 24, -26 };
-}
-
 
 GameState StepGame(GameState state)
 {
@@ -254,6 +251,15 @@ EStepMode gStepMode = StepMode_Play;
 bool gDebugUI_Timeline = false;
 
 
+// Reset gamestates to initial conditions
+void InitGameState()
+{
+	memset(gGameStates, 0, sizeof(gGameStates[0]));
+	gGameStates[0].Player.Location = (Vector2){ 24, -26 };
+
+	gGameStateCount = 1;
+	gCurrentFrame = 0;
+}
 
 
 // Gameplay Screen Initialization logic
@@ -292,11 +298,7 @@ void InitGameplayScreen(void)
 	}
 
 	// setup initial gamestate
-	GameState gameState;
-	InitGame(&gameState);
-	gGameStates[0] = gameState;
-	gGameStateCount = 1;
-	gCurrentFrame = 0;
+	InitGameState();
 }
 
 
@@ -318,6 +320,17 @@ void UpdateGameplayScreen(void)
         finishScreen = 1;
         PlaySound(fxCoin);
     }
+
+	if (IsKeyPressed(KEY_R))
+	{
+		InitGameState();
+	}
+
+	if (IsKeyPressed(KEY_F1))
+	{
+		gDebugUI_Timeline = !gDebugUI_Timeline;
+	}
+
 
 	if (gStepMode == StepMode_Play)
 	{
@@ -348,49 +361,45 @@ void UpdateGameplayScreen(void)
 	}
 }
 
-/*
-// TODO - Requires RayGui
+
 void DrawDebugUI()
 {
 	if (!gDebugUI_Timeline) return;
 
 	char frameTxt[1024];
-	float y = GetScreenHeight() - 70;
-	float x = GetScreenWidth() / 2 - 512;
+	float y = (float)GetScreenHeight() - 70;
+	float x = (float)GetScreenWidth() / 2 - 512;
 	float iw = 32;
 
 	// jump to start
-	if (GuiButton({ x, y, iw, iw }, "#129#"))
+	if (GuiButton((Rectangle){ x, y, iw, iw }, "#129#"))
 	{
 		gStepMode = StepMode_Paused;
 		gCurrentFrame = 0;
-		gameState = gGameStates[gCurrentFrame];
 	}
 	// step backwards
-	if (GuiButton({ x += iw, y, iw, iw }, "#114#"))
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#114#"))
 	{
-		gStepMode = EStepMode::Paused;
+		gStepMode = StepMode_Paused;
 		if (gCurrentFrame > 0)
 		{
 			gCurrentFrame--;
-			gameState = gGameStates[gCurrentFrame];
 		}
 	}
 	// step forwards
-	if (GuiButton({ x += iw, y, iw, iw }, "#115#"))
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#115#"))
 	{
-		gStepMode = EStepMode::Paused;
+		gStepMode = StepMode_Paused;
 		if (gCurrentFrame < (gGameStateCount - 1))
 		{
 			gCurrentFrame++;
-			gameState = gGameStates[gCurrentFrame];
 		}
 		else
 		{
 			// create a new gamestate!
-			gameState = StepGame(gameState);
+			GameState gameState = StepGame(gGameStates[gCurrentFrame]);
 
-			if (gCurrentFrame < gMaxGameStates)
+			if ((gCurrentFrame + 1) < kMaxGameStates)
 			{
 				gCurrentFrame++;
 				gGameStates[gCurrentFrame] = gameState;
@@ -399,72 +408,69 @@ void DrawDebugUI()
 		}
 	}
 	// pause
-	if (GuiButton({ x += iw, y, iw, iw }, "#132#"))
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#132#"))
 	{
-		gStepMode = EStepMode::Paused;
+		gStepMode = StepMode_Paused;
 	}
 	// replay from current location
-	if (GuiButton({ x += iw, y, iw, iw }, "#131#"))
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#131#"))
 	{
-		gStepMode = EStepMode::Replay;
+		gStepMode = StepMode_Replay;
 	}
 	// jump to end
-	if (GuiButton({ x += iw, y, iw, iw }, "#134#"))
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#134#"))
 	{
-		gStepMode = EStepMode::Paused;
+		gStepMode = StepMode_Paused;
 		gCurrentFrame = gGameStateCount - 1;
-		gameState = gGameStates[gCurrentFrame];
 	}
 	// resume gameplay from here
-	if (GuiButton({ x += iw, y, iw, iw }, "#150#"))
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#150#"))
 	{
-		gStepMode = EStepMode::Play;
+		gStepMode = StepMode_Play;
 	}
 	x += iw + 16;
 
 	switch (gStepMode)
 	{
-	case EStepMode::Play:	strcpy(frameTxt, "PLAYING");	break;
-	case EStepMode::Paused:	strcpy(frameTxt, "PAUSED");		break;
-	case EStepMode::Replay:	strcpy(frameTxt, "REPLAY");		break;
+	case StepMode_Play:	strcpy(frameTxt, "PLAYING");	break;
+	case StepMode_Paused:	strcpy(frameTxt, "PAUSED");		break;
+	case StepMode_Replay:	strcpy(frameTxt, "REPLAY");		break;
 	default:	frameTxt[0] = 0;
 	}
-	GuiDrawText(frameTxt, { x, y, 64, 32 }, TEXT_ALIGN_LEFT, RAYWHITE);
+	GuiDrawText(frameTxt, (Rectangle){ x, y, 64, 32 }, TEXT_ALIGN_LEFT, RAYWHITE);
 	x += 64;
 
 	sprintf(frameTxt, "%d / %d", gCurrentFrame, gGameStateCount - 1);
-	GuiDrawText(frameTxt, { x, y, 64, 32 }, TEXT_ALIGN_LEFT, RAYWHITE);
+	GuiDrawText(frameTxt, (Rectangle){ x, y, 64, 32 }, TEXT_ALIGN_LEFT, RAYWHITE);
 	x += 64;
 
 	// show player inputs
+	PlayerInputType* input = &gGameStates[gCurrentFrame].Input;
 	x += 16;
-	gameState.Input.bJump = GuiCheckBox({ x, y, 16, 16 }, "Jump", gameState.Input.bJump);
+	input->bJump = GuiCheckBox((Rectangle) { x, y, 16, 16 }, "Jump", input->bJump);
 	y += 16;
-	gameState.Input.bMoveLeft = GuiCheckBox({ x, y, 16, 16 }, "Left", gameState.Input.bMoveLeft);
+	input->bMoveLeft = GuiCheckBox((Rectangle) { x, y, 16, 16 }, "Left", input->bMoveLeft);
 	x += 48;
-	gameState.Input.bMoveRight = GuiCheckBox({ x, y, 16, 16 }, "Right", gameState.Input.bMoveRight);
-
+	input->bMoveRight = GuiCheckBox((Rectangle) { x, y, 16, 16 }, "Right", input->bMoveRight);
 
 	// timeline slider allows scrubbing thru saved states
 	{
-		if (gStepMode == EStepMode::Play)
+		if (gStepMode == StepMode_Play)
 		{
 			// do not allow setting slider values if playing!
 			GuiSetState(STATE_DISABLED);
 		}
 
 		sprintf(frameTxt, "%d", gGameStateCount - 1);
-		float v = GuiSlider({ 128, kScreenHeight - 32, kScreenWidth - 256, 16 }, "0", frameTxt, (float)gCurrentFrame, 0.0f, (float)gGameStateCount);
+		float v = GuiSlider((Rectangle){ 128, (float)GetScreenHeight() - 32, (float)GetScreenWidth() - 256, 16 }, "0", frameTxt, (float)gCurrentFrame, 0.0f, (float)gGameStateCount);
 		if ((int)v != gCurrentFrame && (int)v < gGameStateCount)
 		{
 			gCurrentFrame = (int)v;
-			gameState = gGameStates[gCurrentFrame];
 		}
 
 		GuiSetState(STATE_NORMAL);
 	}
 }
-*/
 
 
 
@@ -486,6 +492,8 @@ void DrawGameplayScreen(void)
 	BeginMode2D(camera);
 		DrawLevels();
 	EndMode2D();
+
+	DrawDebugUI();
 
     Vector2 pos = { 20, 10 };
     DrawTextEx(font, "GAMEPLAY SCREEN", pos, font.baseSize*3.0f, 4, MAROON);

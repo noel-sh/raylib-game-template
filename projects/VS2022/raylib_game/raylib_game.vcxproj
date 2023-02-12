@@ -353,6 +353,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\..\src\external\cute_aseprite.h" />
     <ClInclude Include="..\..\..\src\external\parson.h" />
+    <ClInclude Include="..\..\..\src\external\raygui.h" />
     <ClInclude Include="..\..\..\src\external\raylib-aseprite.h" />
     <ClInclude Include="..\..\..\src\ldtk.h" />
     <ClInclude Include="..\..\..\src\screens.h" />
