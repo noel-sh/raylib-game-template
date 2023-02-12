@@ -40,14 +40,117 @@
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)
 //----------------------------------------------------------------------------------
-static int framesCounter = 0;
-static int finishScreen = 0;
-static struct ldtk_world* world = NULL;
-static Texture worldTextures[16] = { 0 };
-static Aseprite worldSprites[16] = { 0 };
-static Vector2 cameraOffset = { 0 };
-static float cameraZoom = 1.0f;
-static int worldDepthToShow = 0;
+static struct ldtk_world* gWorld = NULL;
+static Texture gWorldTextures[16] = { 0 };
+static Aseprite gWorldSprites[16] = { 0 };
+
+
+
+//////////////////////////////////////////////////////////////////////////
+// Test area for collision functions!
+
+int ClampInt(int x, int a, int b)
+{
+	if (x < a) x = a;
+	if (x > b) x = b;
+	return x;
+}
+
+typedef struct TraceResult {
+	Vector2 hitPos;	// world position of the hit
+	float t;		// t value between Start and End where the hit occurred
+	int gridValue;	// if we hit an int_grid cell, what was the value
+	bool hasHit;	// did the trace hit anything?
+} TraceResult;
+
+
+static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 end)
+{
+	Rectangle rayBounds = {
+		.x = start.x < end.x ? start.x : end.x,
+		.y = start.y < end.y ? start.y : end.y,
+		.width = fabsf(start.x - end.x),
+		.height = fabsf(start.y - end.y)
+	};
+
+	// iterate all level instances and check which ones contain the bounding box
+	int count = ldtk_get_level_count(world);
+	for (int i = 0; i < count; ++i)
+	{
+		ldtk_level* level = ldtk_get_level(world, i);
+		for (int j = 0; j < level->layer_instances_count; ++j)
+		{
+			ldtk_layer_instance* inst = &level->layer_instances[j];
+			if (inst->int_grid)
+			{
+				// assuming this int_grid is for collisions... idk how to know this!?
+				// game specific I guess
+
+				int instWorldX = level->worldX + inst->px_offset_x;
+				int instWorldY = level->worldY + inst->px_offset_y;
+
+				// check bounds
+				Rectangle instBounds = {
+					.x = instWorldX,
+					.y = instWorldY,
+					.width = (inst->cWid * inst->grid_size),
+					.height = (inst->cHei * inst->grid_size)
+				};
+
+				if (CheckCollisionRecs(rayBounds, instBounds))
+				{
+					printf ("%s potential overlap detected\n", level->identifier);
+
+					// get the relative cell references for start and end
+					int x1 = (int)(start.x - instWorldX) / inst->grid_size;
+					int x2 = (int)(end.x - instWorldX) / inst->grid_size;
+					int y1 = (int)(start.y - instWorldY) / inst->grid_size;
+					int y2 = (int)(end.y - instWorldY) / inst->grid_size;
+
+					// walk from start to end checking each cell along the way
+					int xdir = (x1 < x2) ? 1 : -1;
+					int ydir = (y1 < y2) ? 1 : -1;
+
+					// walk in the longest axis so we don't miss any cells
+					if (abs(x1 - x2) >= abs(y1 - y2))
+					{
+						// walk X!
+					}
+					else
+					{
+						// walk Y
+						int m_new = 2 * (x2 - x1);
+						int slope_error_new = m_new - (y2 - y1);
+						int x = x1;
+						for (int y = y1; y != y2; y += ydir)
+						{
+							printf("%s (%d,%d)\n", level->identifier, x, y);
+
+							// skip out of bounds cells
+							if (x < 0 || x >= inst->cWid || y < 0 || y >= inst->cHei) continue;
+
+							// check cell
+							int c = x + y * inst->cWid;
+
+							if (inst->int_grid[c] != 0)
+							{
+								printf ("COLLISION!! (%d,%d) = [%d]\n", x, y, inst->int_grid[c]);
+							}
+
+							slope_error_new += m_new;
+							if (slope_error_new >= 0) {
+								x += xdir;
+								slope_error_new -= 2 * (y2 - y1);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+
 
 //----------------------------------------------------------------------------------
 // Gameplay Screen Functions Definition
@@ -76,15 +179,15 @@ static void DrawTile(ldtk_layer_instance* inst, ldtk_tile* tile, Vector2 offset)
 }
 
 
-void DrawLevels()
+void DrawLevels(int showDepth)
 {
 	// draw everything for now
-	if (!world) return;
+	if (!gWorld) return;
 
-	int count = ldtk_get_level_count(world);
+	int count = ldtk_get_level_count(gWorld);
 	for (int i = 0; i < count; ++i)
 	{
-		ldtk_level* level = ldtk_get_level(world, i);
+		ldtk_level* level = ldtk_get_level(gWorld, i);
 
 		// render layers back to front
 		for (int j = level->layer_instances_count-1; j >= 0 ; --j)
@@ -92,7 +195,7 @@ void DrawLevels()
 			ldtk_layer_instance* inst = &level->layer_instances[j];
 			Texture* tex = NULL;
 
-			if (level->worldDepth != worldDepthToShow)
+			if (level->worldDepth != showDepth)
 				continue;
 
 			if (inst->tileset)
@@ -287,6 +390,8 @@ void UpdatePlayer(GameState* state)
 	// TODO check if player is on the ground (raycast?)
 	// for now collide with the y=0 plane
 	bool bIsGrounded = player->Location.y >= 0.0f;
+
+	WorldTrace(gWorld, player->Location, Vector2Add(player->Location, (Vector2) { 0.0f, 100.0f }));
 
 	if (bIsGrounded)
 	{
@@ -580,6 +685,12 @@ static void DrawPlayer(GameState state)
 // Gameplay Screen Functions Definition
 //----------------------------------------------------------------------------------
 
+static int framesCounter = 0;
+static int finishScreen = 0;
+static Vector2 cameraOffset = { 0 };
+static float cameraZoom = 1.0f;
+static int worldDepthToShow = 0;
+
 // Gameplay Screen Initialization logic
 void InitGameplayScreen(void)
 {
@@ -587,32 +698,36 @@ void InitGameplayScreen(void)
 	framesCounter = 0;
 	finishScreen = 0;
 
-	world = ldtk_load_world("resources/WorldMap_GridVania_layout.ldtk");
+	gWorld = ldtk_load_world("resources/WorldMap_GridVania_layout.ldtk");
 
-	if (world)
+	if (gWorld)
 	{
 		// load textures for tilesets and store pointer in tileset userdata
 		char texturePath[260];
-		int count = ldtk_get_tileset_count(world);
+		int count = ldtk_get_tileset_count(gWorld);
 		if (count > 16) count = 16;
 
 		for (int i = 0; i < count; ++i)
 		{
-			struct ldtk_tileset* tileset = ldtk_get_tileset(world, i);
+			struct ldtk_tileset* tileset = ldtk_get_tileset(gWorld, i);
 			sprintf(texturePath, "resources/%s", tileset->relPath);
 
 			if (strstr(texturePath, ".aseprite"))
 			{
-				worldSprites[i] = LoadAseprite(texturePath);
-				worldTextures[i] = GetAsepriteTexture(worldSprites[i]);
-				tileset->userdata = &worldTextures[i];
+				gWorldSprites[i] = LoadAseprite(texturePath);
+				gWorldTextures[i] = GetAsepriteTexture(gWorldSprites[i]);
+				tileset->userdata = &gWorldTextures[i];
 			}
 			else
 			{
-				worldTextures[i] = LoadTexture(texturePath);
-				tileset->userdata = &worldTextures[i];
+				gWorldTextures[i] = LoadTexture(texturePath);
+				tileset->userdata = &gWorldTextures[i];
 			}
 		}
+
+
+		// test collisions!
+		WorldTrace(gWorld, (Vector2){ 128, -20 }, (Vector2) { 128, 512 });
 	}
 
 	// setup initial gamestate
@@ -696,7 +811,7 @@ void DrawGameplayScreen(void)
 		.zoom = cameraZoom 
 	};
 	BeginMode2D(camera);
-		DrawLevels();
+		DrawLevels(worldDepthToShow);
 
 		DrawPlayer(gGameStates[gCurrentFrame]);
 	EndMode2D();
@@ -718,11 +833,11 @@ void UnloadGameplayScreen(void)
 
 	for (int i = 0; i < 16; ++i)
 	{
-		UnloadTexture(worldTextures[i]);
-		UnloadAseprite(worldSprites[i]);
+		UnloadTexture(gWorldTextures[i]);
+		UnloadAseprite(gWorldSprites[i]);
 	}
 
-    ldtk_destroy_world(world);
+    ldtk_destroy_world(gWorld);
 }
 
 // Gameplay Screen should finish?
