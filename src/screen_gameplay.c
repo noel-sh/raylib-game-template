@@ -380,6 +380,8 @@ void UpdatePlayer(GameState* state)
 		break;
 	}
 
+	player->JumpStateTime += 1;
+
 	posDelta.y = player->Velocity.y;// + (g / 2.0f);
 	player->Velocity.y += g;
 
@@ -390,12 +392,10 @@ void UpdatePlayer(GameState* state)
 	}
 
 
-
+	//////////////////////////////////////////////////////////////////////////
 	// Move player according to desired delta (todo - collide with world!)
 	player->Location = Vector2Add(player->Location, posDelta);
 
-
-	player->JumpStateTime += 1;
 
 	// store if the player had Jump pressed this frame
 	player->bJumpPrev = input->bJump;
@@ -405,7 +405,7 @@ void UpdatePlayer(GameState* state)
 //////////////////////////////////////////////////////////////////////////
 
 
-GameState StepGame(GameState state)
+static GameState StepGame(GameState state)
 {
 	// start by copying the previous gamestate
 	GameState newState = state;
@@ -427,14 +427,6 @@ GameState StepGame(GameState state)
 //////////////////////////////////////////////////////////////////////////
 // Main loop
 
-
-// some debug stuff
-static int gCurrentFrame = 0;
-#define kMaxGameStates (60 * 60 * 10)	// 60 FPS * 60s * 10 = 10mins capacity (currently ~1.4mb)
-static GameState gGameStates[kMaxGameStates] = {0};
-
-int gGameStateCount = 0;
-
 typedef enum EStepMode
 {
 	StepMode_Play,
@@ -442,13 +434,18 @@ typedef enum EStepMode
 	StepMode_Replay,
 } EStepMode;
 
-EStepMode gStepMode = StepMode_Play;
 
-bool gDebugUI_Timeline = false;
+// game state tracking
+static int gCurrentFrame = 0;
+#define kMaxGameStates (60 * 60 * 10)	// 60 FPS * 60s * 10 = 10mins capacity (currently ~1.4mb)
+static GameState gGameStates[kMaxGameStates] = {0};
+static int gGameStateCount = 0;
+static EStepMode gStepMode = StepMode_Play;
+static bool gDebugUI_Timeline = false;
 
 
 // Reset gamestates to initial conditions
-void InitGameState()
+static void InitGameState()
 {
 	memset(gGameStates, 0, sizeof(gGameStates[0]));
 	gGameStates[0].Player.Location = (Vector2){ 24, -26 };
@@ -458,6 +455,131 @@ void InitGameState()
 }
 
 
+static void DrawDebugUI()
+{
+	if (!gDebugUI_Timeline) return;
+
+	char frameTxt[1024];
+	float y = (float)GetScreenHeight() - 70;
+	float x = (float)GetScreenWidth() / 2 - 512;
+	float iw = 32;
+
+	// jump to start
+	if (GuiButton((Rectangle) { x, y, iw, iw }, "#129#"))
+	{
+		gStepMode = StepMode_Paused;
+		gCurrentFrame = 0;
+	}
+	// step backwards
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#114#"))
+	{
+		gStepMode = StepMode_Paused;
+		if (gCurrentFrame > 0)
+		{
+			gCurrentFrame--;
+		}
+	}
+	// step forwards
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#115#"))
+	{
+		gStepMode = StepMode_Paused;
+		if (gCurrentFrame < (gGameStateCount - 1))
+		{
+			gCurrentFrame++;
+		}
+		else
+		{
+			// create a new gamestate!
+			GameState gameState = StepGame(gGameStates[gCurrentFrame]);
+
+			if ((gCurrentFrame + 1) < kMaxGameStates)
+			{
+				gCurrentFrame++;
+				gGameStates[gCurrentFrame] = gameState;
+				gGameStateCount = gCurrentFrame + 1;
+			}
+		}
+	}
+	// pause
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#132#"))
+	{
+		gStepMode = StepMode_Paused;
+	}
+	// replay from current location
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#131#"))
+	{
+		gStepMode = StepMode_Replay;
+	}
+	// jump to end
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#134#"))
+	{
+		gStepMode = StepMode_Paused;
+		gCurrentFrame = gGameStateCount - 1;
+	}
+	// resume gameplay from here
+	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#150#"))
+	{
+		gStepMode = StepMode_Play;
+	}
+	x += iw + 16;
+
+	switch (gStepMode)
+	{
+	case StepMode_Play:	strcpy(frameTxt, "PLAYING");	break;
+	case StepMode_Paused:	strcpy(frameTxt, "PAUSED");		break;
+	case StepMode_Replay:	strcpy(frameTxt, "REPLAY");		break;
+	default:	frameTxt[0] = 0;
+	}
+	GuiDrawText(frameTxt, (Rectangle) { x, y, 64, 32 }, TEXT_ALIGN_LEFT, RAYWHITE);
+	x += 64;
+
+	sprintf(frameTxt, "%d / %d", gCurrentFrame, gGameStateCount - 1);
+	GuiDrawText(frameTxt, (Rectangle) { x, y, 64, 32 }, TEXT_ALIGN_LEFT, RAYWHITE);
+	x += 64;
+
+	// show player inputs
+	PlayerInput* input = &gGameStates[gCurrentFrame].Input;
+	x += 16;
+	input->bJump = GuiCheckBox((Rectangle) { x, y, 16, 16 }, "Jump", input->bJump);
+	y += 16;
+	input->bMoveLeft = GuiCheckBox((Rectangle) { x, y, 16, 16 }, "Left", input->bMoveLeft);
+	x += 48;
+	input->bMoveRight = GuiCheckBox((Rectangle) { x, y, 16, 16 }, "Right", input->bMoveRight);
+
+	// timeline slider allows scrubbing thru saved states
+	{
+		if (gStepMode == StepMode_Play)
+		{
+			// do not allow setting slider values if playing!
+			GuiSetState(STATE_DISABLED);
+		}
+
+		sprintf(frameTxt, "%d", gGameStateCount - 1);
+		float v = GuiSlider((Rectangle) { 128, (float)GetScreenHeight() - 32, (float)GetScreenWidth() - 256, 16 }, "0", frameTxt, (float)gCurrentFrame, 0.0f, (float)gGameStateCount);
+		if ((int)v != gCurrentFrame && (int)v < gGameStateCount)
+		{
+			gCurrentFrame = (int)v;
+		}
+
+		GuiSetState(STATE_NORMAL);
+	}
+}
+
+
+static void DrawPlayer(GameState state)
+{
+	int pw = gPlayerWidth;
+	int ph = gPlayerHeight;
+	int px = (int)state.Player.Location.x - (pw / 2);
+	int py = (int)state.Player.Location.y - ph;
+	DrawRectangle(px, py, pw, ph, RAYWHITE);
+}
+
+
+//----------------------------------------------------------------------------------
+// Gameplay Screen Functions Definition
+//----------------------------------------------------------------------------------
+
 // Gameplay Screen Initialization logic
 void InitGameplayScreen(void)
 {
@@ -465,7 +587,7 @@ void InitGameplayScreen(void)
 	framesCounter = 0;
 	finishScreen = 0;
 
-	//world = ldtk_load_world("resources/WorldMap_Free_layout.ldtk");
+	world = ldtk_load_world("resources/WorldMap_GridVania_layout.ldtk");
 
 	if (world)
 	{
@@ -555,127 +677,6 @@ void UpdateGameplayScreen(void)
 			gStepMode = StepMode_Paused;
 		}
 	}
-}
-
-
-void DrawDebugUI()
-{
-	if (!gDebugUI_Timeline) return;
-
-	char frameTxt[1024];
-	float y = (float)GetScreenHeight() - 70;
-	float x = (float)GetScreenWidth() / 2 - 512;
-	float iw = 32;
-
-	// jump to start
-	if (GuiButton((Rectangle){ x, y, iw, iw }, "#129#"))
-	{
-		gStepMode = StepMode_Paused;
-		gCurrentFrame = 0;
-	}
-	// step backwards
-	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#114#"))
-	{
-		gStepMode = StepMode_Paused;
-		if (gCurrentFrame > 0)
-		{
-			gCurrentFrame--;
-		}
-	}
-	// step forwards
-	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#115#"))
-	{
-		gStepMode = StepMode_Paused;
-		if (gCurrentFrame < (gGameStateCount - 1))
-		{
-			gCurrentFrame++;
-		}
-		else
-		{
-			// create a new gamestate!
-			GameState gameState = StepGame(gGameStates[gCurrentFrame]);
-
-			if ((gCurrentFrame + 1) < kMaxGameStates)
-			{
-				gCurrentFrame++;
-				gGameStates[gCurrentFrame] = gameState;
-				gGameStateCount = gCurrentFrame + 1;
-			}
-		}
-	}
-	// pause
-	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#132#"))
-	{
-		gStepMode = StepMode_Paused;
-	}
-	// replay from current location
-	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#131#"))
-	{
-		gStepMode = StepMode_Replay;
-	}
-	// jump to end
-	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#134#"))
-	{
-		gStepMode = StepMode_Paused;
-		gCurrentFrame = gGameStateCount - 1;
-	}
-	// resume gameplay from here
-	if (GuiButton((Rectangle) { x += iw, y, iw, iw }, "#150#"))
-	{
-		gStepMode = StepMode_Play;
-	}
-	x += iw + 16;
-
-	switch (gStepMode)
-	{
-	case StepMode_Play:	strcpy(frameTxt, "PLAYING");	break;
-	case StepMode_Paused:	strcpy(frameTxt, "PAUSED");		break;
-	case StepMode_Replay:	strcpy(frameTxt, "REPLAY");		break;
-	default:	frameTxt[0] = 0;
-	}
-	GuiDrawText(frameTxt, (Rectangle){ x, y, 64, 32 }, TEXT_ALIGN_LEFT, RAYWHITE);
-	x += 64;
-
-	sprintf(frameTxt, "%d / %d", gCurrentFrame, gGameStateCount - 1);
-	GuiDrawText(frameTxt, (Rectangle){ x, y, 64, 32 }, TEXT_ALIGN_LEFT, RAYWHITE);
-	x += 64;
-
-	// show player inputs
-	PlayerInput* input = &gGameStates[gCurrentFrame].Input;
-	x += 16;
-	input->bJump = GuiCheckBox((Rectangle) { x, y, 16, 16 }, "Jump", input->bJump);
-	y += 16;
-	input->bMoveLeft = GuiCheckBox((Rectangle) { x, y, 16, 16 }, "Left", input->bMoveLeft);
-	x += 48;
-	input->bMoveRight = GuiCheckBox((Rectangle) { x, y, 16, 16 }, "Right", input->bMoveRight);
-
-	// timeline slider allows scrubbing thru saved states
-	{
-		if (gStepMode == StepMode_Play)
-		{
-			// do not allow setting slider values if playing!
-			GuiSetState(STATE_DISABLED);
-		}
-
-		sprintf(frameTxt, "%d", gGameStateCount - 1);
-		float v = GuiSlider((Rectangle){ 128, (float)GetScreenHeight() - 32, (float)GetScreenWidth() - 256, 16 }, "0", frameTxt, (float)gCurrentFrame, 0.0f, (float)gGameStateCount);
-		if ((int)v != gCurrentFrame && (int)v < gGameStateCount)
-		{
-			gCurrentFrame = (int)v;
-		}
-
-		GuiSetState(STATE_NORMAL);
-	}
-}
-
-
-static void DrawPlayer(GameState state)
-{
-	int pw = gPlayerWidth;
-	int ph = gPlayerHeight;
-	int px = (int)state.Player.Location.x - (pw / 2);
-	int py = (int)state.Player.Location.y - ph;
-	DrawRectangle(px, py, pw, ph, RAYWHITE);
 }
 
 
