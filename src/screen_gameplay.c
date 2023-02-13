@@ -62,7 +62,7 @@ typedef struct TraceResult {
 } TraceResult;
 
 
-static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 end)
+static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 end, bool bDebugDraw)
 {
 	Rectangle rayBounds = {
 		.x = start.x < end.x ? start.x : end.x,
@@ -106,81 +106,77 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 				{
 					printf ("%s potential overlap detected\n", level->identifier);
 
+					// walk from start to end checking each cell along the way
+					int xdir = (start.x < end.x) ? 1 : -1;
+					int ydir = (start.y < end.y) ? 1 : -1;
+
 					// get the relative cell references for start and end
 					int x1 = (int)(start.x - instWorldX) / inst->grid_size;
 					int x2 = (int)(end.x - instWorldX) / inst->grid_size;
 					int y1 = (int)(start.y - instWorldY) / inst->grid_size;
 					int y2 = (int)(end.y - instWorldY) / inst->grid_size;
 
-					// walk from start to end checking each cell along the way
-					int xdir = (x1 < x2) ? 1 : -1;
-					int ydir = (y1 < y2) ? 1 : -1;
-
 					// store first collision here
 					int cx = -1, cy = -1, cgrid = 0;
 
 					// walk in the longest axis and find the first colliding cell
-					if (abs(x1 - x2) >= abs(y1 - y2))
+					if (abs(start.x - end.x) >= abs(start.y - end.y))
 					{
 						// walk X
+						x2 += xdir;
 						int m_new = 2 * (y2 - y1);
-						int slope_error_new = m_new - abs(x2 - x1);
+						int slope_error_new = m_new - (x2 - x1);
 						int y = y1;
 						for (int x = x1; x != x2; x += xdir)
 						{
 							// skip out of bounds cells
 							if (x < 0 || x >= inst->cWid || y < 0 || y >= inst->cHei) continue;
 
+							if (bDebugDraw) DrawRectangleLines(instWorldX + x * inst->grid_size, instWorldY + y * inst->grid_size, inst->grid_size, inst->grid_size, WHITE);
+
 							int c = x + y * inst->cWid;
 							if (inst->int_grid[c] != 0)
 							{
-								printf("%s (%d,%d) = [%d] HIT!\n", level->identifier, x, y, inst->int_grid[c]);
 								cx = x;
 								cy = y;
 								cgrid = inst->int_grid[c];
 								break;
 							}
-							else
-							{
-								printf("%s (%d,%d)\n", level->identifier, x, y);
-							}
 
 							slope_error_new += m_new;
 							if (slope_error_new >= 0) {
 								y += ydir;
-								slope_error_new -= 2 * abs(x2 - x1);
+								slope_error_new -= 2 * (x2 - x1);
 							}
 						}
 					}
 					else
 					{
 						// walk Y
+						y2 += ydir;
 						int m_new = 2 * (x2 - x1);
-						int slope_error_new = m_new - abs(y2 - y1);
+						int slope_error_new = m_new - (y2 - y1);
 						int x = x1;
 						for (int y = y1; y != y2; y += ydir)
 						{
 							// skip out of bounds cells
 							if (x < 0 || x >= inst->cWid || y < 0 || y >= inst->cHei) continue;
 
+							if (bDebugDraw) DrawRectangleLines(instWorldX + x * inst->grid_size, instWorldY + y * inst->grid_size, inst->grid_size, inst->grid_size, WHITE);
+
 							int c = x + y * inst->cWid;
 							if (inst->int_grid[c] != 0)
 							{
-								printf ("%s (%d,%d) = [%d] HIT!\n", level->identifier, x, y, inst->int_grid[c]);
 								cx = x;
 								cy = y;
 								cgrid = inst->int_grid[c];
 								break;
 							}
-							else
-							{
-								printf("%s (%d,%d)\n", level->identifier, x, y);
-							}
 
 							slope_error_new += m_new;
 							if (slope_error_new >= 0) {
 								x += xdir;
-								slope_error_new -= 2 * abs(y2 - y1);
+								slope_error_new -= 2 * (y2 - y1);
 							}
 						}
 					}
@@ -809,6 +805,9 @@ static void DrawTraceResult(TraceResult hit)
 	// draw a line from start to hit
 	// draw an arrow showing normal
 
+	// invoke the function with debug draw enabled
+	WorldTrace(gWorld, hit.start, hit.end, true);
+
 	if (hit.hasHit)
 	{
 		DrawLine(hit.start.x, hit.start.y, hit.hitPos.x, hit.hitPos.y, RED);
@@ -928,15 +927,9 @@ void UpdateGameplayScreen(void)
 		Vector2 start = GetScreenToWorld2D(gMouseRayStart, currentCamera);
 		Vector2 end = GetScreenToWorld2D(GetMousePosition(), currentCamera);
 
-		MouseRayHit = WorldTrace(gWorld, start, end);
+		MouseRayHit = WorldTrace(gWorld, start, end, false);
 	}
 	gMouseRightDown = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
-
-	if (IsKeyPressed(KEY_T))
-	{
-		// rerun the trace to debug it
-		WorldTrace(gWorld, MouseRayHit.start, MouseRayHit.end);
-	}
 
 	if (gStepMode == StepMode_Play)
 	{
