@@ -36,6 +36,7 @@
 
 
 #include <stdio.h>
+#include <float.h>
 
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)
@@ -49,18 +50,15 @@ static Aseprite gWorldSprites[16] = { 0 };
 //////////////////////////////////////////////////////////////////////////
 // Test area for collision functions!
 
-int ClampInt(int x, int a, int b)
-{
-	if (x < a) x = a;
-	if (x > b) x = b;
-	return x;
-}
 
 typedef struct TraceResult {
-	Vector2 hitPos;	// world position of the hit
-	float t;		// t value between Start and End where the hit occurred
-	int gridValue;	// if we hit an int_grid cell, what was the value
-	bool hasHit;	// did the trace hit anything?
+	Vector2 start;
+	Vector2 end;
+	Vector2 hitPos;		// world position of the hit
+	Vector2 hitNormal;	// world normal of the surface that was hit
+	float dist;			// distance from Start where the hit occurred
+	int gridValue;		// if we hit an int_grid cell, what was the value
+	bool hasHit;		// did the trace hit anything?
 } TraceResult;
 
 
@@ -71,6 +69,13 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 		.y = start.y < end.y ? start.y : end.y,
 		.width = fabsf(start.x - end.x),
 		.height = fabsf(start.y - end.y)
+	};
+
+	TraceResult result = {
+		.start = start,
+		.end = end,
+		.hasHit = false,
+		.dist = FLT_MAX
 	};
 
 	// iterate all level instances and check which ones contain the bounding box
@@ -111,36 +116,151 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 					int xdir = (x1 < x2) ? 1 : -1;
 					int ydir = (y1 < y2) ? 1 : -1;
 
-					// walk in the longest axis so we don't miss any cells
+					// store first collision here
+					int cx = -1, cy = -1, cgrid = 0;
+
+					// walk in the longest axis and find the first colliding cell
 					if (abs(x1 - x2) >= abs(y1 - y2))
 					{
-						// walk X!
+						// walk X
+						int m_new = 2 * (y2 - y1);
+						int slope_error_new = m_new - abs(x2 - x1);
+						int y = y1;
+						for (int x = x1; x != x2; x += xdir)
+						{
+							// skip out of bounds cells
+							if (x < 0 || x >= inst->cWid || y < 0 || y >= inst->cHei) continue;
+
+							int c = x + y * inst->cWid;
+							if (inst->int_grid[c] != 0)
+							{
+								printf("%s (%d,%d) = [%d] HIT!\n", level->identifier, x, y, inst->int_grid[c]);
+								cx = x;
+								cy = y;
+								cgrid = inst->int_grid[c];
+								break;
+							}
+							else
+							{
+								printf("%s (%d,%d)\n", level->identifier, x, y);
+							}
+
+							slope_error_new += m_new;
+							if (slope_error_new >= 0) {
+								y += ydir;
+								slope_error_new -= 2 * abs(x2 - x1);
+							}
+						}
 					}
 					else
 					{
 						// walk Y
 						int m_new = 2 * (x2 - x1);
-						int slope_error_new = m_new - (y2 - y1);
+						int slope_error_new = m_new - abs(y2 - y1);
 						int x = x1;
 						for (int y = y1; y != y2; y += ydir)
 						{
-							printf("%s (%d,%d)\n", level->identifier, x, y);
-
 							// skip out of bounds cells
 							if (x < 0 || x >= inst->cWid || y < 0 || y >= inst->cHei) continue;
 
-							// check cell
 							int c = x + y * inst->cWid;
-
 							if (inst->int_grid[c] != 0)
 							{
-								printf ("COLLISION!! (%d,%d) = [%d]\n", x, y, inst->int_grid[c]);
+								printf ("%s (%d,%d) = [%d] HIT!\n", level->identifier, x, y, inst->int_grid[c]);
+								cx = x;
+								cy = y;
+								cgrid = inst->int_grid[c];
+								break;
+							}
+							else
+							{
+								printf("%s (%d,%d)\n", level->identifier, x, y);
 							}
 
 							slope_error_new += m_new;
 							if (slope_error_new >= 0) {
 								x += xdir;
-								slope_error_new -= 2 * (y2 - y1);
+								slope_error_new -= 2 * abs(y2 - y1);
+							}
+						}
+					}
+
+					if (cx != -1 && cy != -1)
+					{
+						// find accurate collision point
+
+						// construct world space AABB for the cell and collide ray with it
+						// we know which direction the ray was headed so we can just check 2 lines not all 4
+
+						Vector2 tl = { instWorldX + cx * inst->grid_size, instWorldY + cy * inst->grid_size };
+						Vector2 bl = { instWorldX + cx * inst->grid_size, instWorldY + (cy + 1) * inst->grid_size };
+						Vector2 tr = { instWorldX + (cx + 1) * inst->grid_size, instWorldY + cy * inst->grid_size };
+						Vector2 br = { instWorldX + (cx + 1) * inst->grid_size, instWorldY + (cy + 1) * inst->grid_size };
+
+						Vector2 colPoint;
+						if (xdir > 0)
+						{
+							// check left side
+							if (CheckCollisionLines(start, end, tl, bl, &colPoint))
+							{
+								float dist = Vector2Distance(start, colPoint);
+								if (dist < result.dist)
+								{
+									result.hasHit = true;
+									result.dist = dist;
+									result.hitPos = colPoint;
+									result.hitNormal = (Vector2){ -1, 0 };
+									result.gridValue = cgrid;
+								}
+							}
+						}
+						else
+						{
+							// check right side
+							if (CheckCollisionLines(start, end, tr, br, &colPoint))
+							{
+								float dist = Vector2Distance(start, colPoint);
+								if (dist < result.dist)
+								{
+									result.hasHit = true;
+									result.dist = dist;
+									result.hitPos = colPoint;
+									result.hitNormal = (Vector2){ 1, 0 };
+									result.gridValue = cgrid;
+								}
+							}
+						}
+
+						if (ydir > 0)
+						{
+							// check top side
+							if (CheckCollisionLines(start, end, tl, tr, &colPoint))
+							{
+								float dist = Vector2Distance(start, colPoint);
+								if (dist < result.dist)
+								{
+									result.hasHit = true;
+									result.dist = dist;
+									result.hitPos = colPoint;
+									result.hitNormal = (Vector2){ 0, -1 };
+									result.gridValue = cgrid;
+								}
+							}
+						}
+						else
+						{
+							// check bottom side
+							if (CheckCollisionLines(start, end, bl, br, &colPoint))
+							{
+								float dist = Vector2Distance(start, colPoint);
+								if (dist < result.dist)
+								{
+									result.hasHit = true;
+									result.dist = dist;
+									result.hitPos = colPoint;
+									result.hitNormal = (Vector2){ 0, 1 };
+									result.gridValue = cgrid;
+								}
 							}
 						}
 					}
@@ -148,6 +268,8 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 			}
 		}
 	}
+
+	return result;
 }
 
 
@@ -391,7 +513,7 @@ void UpdatePlayer(GameState* state)
 	// for now collide with the y=0 plane
 	bool bIsGrounded = player->Location.y >= 0.0f;
 
-	WorldTrace(gWorld, player->Location, Vector2Add(player->Location, (Vector2) { 0.0f, 100.0f }));
+	//WorldTrace(gWorld, player->Location, Vector2Add(player->Location, (Vector2) { 0.0f, 100.0f }));
 
 	if (bIsGrounded)
 	{
@@ -681,6 +803,24 @@ static void DrawPlayer(GameState state)
 }
 
 
+static void DrawTraceResult(TraceResult hit)
+{
+	// draw a line from start to end
+	// draw a line from start to hit
+	// draw an arrow showing normal
+
+	if (hit.hasHit)
+	{
+		DrawLine(hit.start.x, hit.start.y, hit.hitPos.x, hit.hitPos.y, RED);
+		DrawLine(hit.hitPos.x, hit.hitPos.y, hit.end.x, hit.end.y, YELLOW);
+	}
+	else
+	{
+		DrawLine(hit.start.x, hit.start.y, hit.end.x, hit.end.y, YELLOW);
+	}
+}
+
+
 //----------------------------------------------------------------------------------
 // Gameplay Screen Functions Definition
 //----------------------------------------------------------------------------------
@@ -690,6 +830,12 @@ static int finishScreen = 0;
 static Vector2 cameraOffset = { 0 };
 static float cameraZoom = 1.0f;
 static int worldDepthToShow = 0;
+
+static Camera2D currentCamera = {0};
+
+static bool gMouseRightDown = false;
+static Vector2 gMouseRayStart;
+static TraceResult MouseRayHit = {0};
 
 // Gameplay Screen Initialization logic
 void InitGameplayScreen(void)
@@ -727,7 +873,8 @@ void InitGameplayScreen(void)
 
 
 		// test collisions!
-		WorldTrace(gWorld, (Vector2){ 128, -20 }, (Vector2) { 128, 512 });
+		//WorldTrace(gWorld, (Vector2){ 128, 32 }, (Vector2) { 128, 512 });
+		//WorldTrace(gWorld, (Vector2) { 40, 40 }, (Vector2) { 228, 40 });
 	}
 
 	// setup initial gamestate
@@ -747,6 +894,12 @@ void UpdateGameplayScreen(void)
 
 	cameraZoom += GetMouseWheelMoveV().y * 0.1f;
 
+	currentCamera = (Camera2D){
+		.offset = (Vector2) { GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f },
+		.target = (Vector2) { -cameraOffset.x, -cameraOffset.y },
+		.zoom = cameraZoom
+	};
+
     // Press enter or tap to change to ENDING screen
     if (IsKeyPressed(KEY_ENTER))
     {
@@ -764,6 +917,26 @@ void UpdateGameplayScreen(void)
 		gDebugUI_Timeline = !gDebugUI_Timeline;
 	}
 
+	if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
+	{
+		if (!gMouseRightDown)
+		{
+			gMouseRayStart = GetMousePosition();
+		}
+
+		// do raycast!
+		Vector2 start = GetScreenToWorld2D(gMouseRayStart, currentCamera);
+		Vector2 end = GetScreenToWorld2D(GetMousePosition(), currentCamera);
+
+		MouseRayHit = WorldTrace(gWorld, start, end);
+	}
+	gMouseRightDown = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+
+	if (IsKeyPressed(KEY_T))
+	{
+		// rerun the trace to debug it
+		WorldTrace(gWorld, MouseRayHit.start, MouseRayHit.end);
+	}
 
 	if (gStepMode == StepMode_Play)
 	{
@@ -800,20 +973,12 @@ void DrawGameplayScreen(void)
 {
 	DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
 
-	Vector2 target = {
-		-cameraOffset.x,
-		-cameraOffset.y
-	};
-
-	Camera2D camera = { 
-		.offset = (Vector2) { GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f },
-		.target = target,
-		.zoom = cameraZoom 
-	};
-	BeginMode2D(camera);
+	BeginMode2D(currentCamera);
 		DrawLevels(worldDepthToShow);
 
 		DrawPlayer(gGameStates[gCurrentFrame]);
+
+		DrawTraceResult(MouseRayHit);
 	EndMode2D();
 
 	DrawDebugUI();
@@ -825,6 +990,7 @@ void DrawGameplayScreen(void)
 	DrawFPS(GetScreenWidth() - 100, 10);
 	DrawText(TextFormat("Height: %f", -gStat_MaxHeight), GetScreenWidth() - 200, 60, 10, RAYWHITE);
 }
+
 
 // Gameplay Screen Unload logic
 void UnloadGameplayScreen(void)
@@ -839,6 +1005,7 @@ void UnloadGameplayScreen(void)
 
     ldtk_destroy_world(gWorld);
 }
+
 
 // Gameplay Screen should finish?
 int FinishGameplayScreen(void)
