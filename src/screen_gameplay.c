@@ -132,6 +132,7 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 					int incX, incY;
 					float nextX, nextY;
 					float t = 0.0f;
+					bool lastMoveWasHorizontal = true;
 
 					if (dx == 0.0f)
 					{
@@ -195,8 +196,9 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 										(rayStart.y + dy * t) * gridF + instWorldY
 									};
 
-									// TODO figure this out from which branch was taken last loop?
-									result.hitNormal = (Vector2) {0, -1};
+									// calculate the surface normal from the direction we last stepped in
+									if (lastMoveWasHorizontal)	result.hitNormal = (Vector2){ (nextX < 0.0f) ? 1.0f : -1.0f, 0 };
+									else			result.hitNormal = (Vector2){ 0, (nextY < 0.0f) ? 1.0f : -1.0f };
 								}
 
 								// TODO we could stop the loop here but useful for now for debug draw purposes
@@ -221,12 +223,14 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 							y += incY;
 							t = fabsf(nextY);
 							nextY += dt_dy;
+							lastMoveWasHorizontal = false;
 						}
 						else
 						{
 							x += incX;
 							t = fabsf(nextX);
 							nextX += dt_dx;
+							lastMoveWasHorizontal = true;
 						}
 					}
 				}
@@ -780,8 +784,11 @@ static void DrawTraceResult(TraceResult hit)
 
 	if (hit.hasHit)
 	{
-		DrawLineV(hit.start, hit.hitPos, RED);
-		DrawLineV(hit.hitPos, hit.end, YELLOW);
+		DrawLineV(hit.start, hit.hitPos, YELLOW);
+		DrawLineV(hit.hitPos, hit.end, RED);
+
+		Vector2 normalRay = Vector2Scale(hit.hitNormal, 12.0f);
+		DrawLineV(hit.hitPos, Vector2Add(hit.hitPos, normalRay), GREEN);
 	}
 	else
 	{
