@@ -482,8 +482,8 @@ void UpdatePlayer(GameState* state)
 	// for now collide with the y=0 plane
 	bool bIsGrounded = player->Location.y >= 0.0f;
 
-	//TraceResult groundTrace = WorldTrace(gWorld, player->Location, Vector2Add(player->Location, (Vector2) { 0.0f, 100.0f }), false);
-	//bIsGrounded = groundTrace.hasHit && groundTrace.dist < 1.0f;
+	TraceResult groundTrace = WorldTrace(gWorld, player->Location, Vector2Add(player->Location, (Vector2) { 0.0f, 1.0f }), 0, false);
+	bIsGrounded = groundTrace.hasHit && groundTrace.dist < 1.0f;
 
 	if (bIsGrounded)
 	{
