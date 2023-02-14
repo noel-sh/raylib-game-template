@@ -198,8 +198,8 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 									};
 
 									// calculate the surface normal from the direction we last stepped in
-									if (lastMoveWasHorizontal)	result.hitNormal = (Vector2){ (nextX < 0.0f) ? 1.0f : -1.0f, 0 };
-									else			result.hitNormal = (Vector2){ 0, (nextY < 0.0f) ? 1.0f : -1.0f };
+									if (lastMoveWasHorizontal)	result.hitNormal = (Vector2){ (nextX < 0.0f) ? 1.0f : -1.0f, 0.0f };
+									else						result.hitNormal = (Vector2){ 0.0f, (nextY < 0.0f) ? 1.0f : -1.0f };
 								}
 
 								// TODO we could stop the loop here but useful for now for debug draw purposes
@@ -592,17 +592,20 @@ void UpdatePlayer(GameState* state)
 	//////////////////////////////////////////////////////////////////////////
 	// Collide desired posDelta with the world
 	{
+		// Simple raycasts in the four directions.
+		// To improve this we could cast multiple rays, or make a shape cast function.
+
 		if (fabsf(posDelta.x) > 0.0f)
 		{
 			// moving right, raycast from the right hand side of the player
-			Vector2 playerOffset = { gPlayerWidth / 2, -2 };
+			Vector2 playerOffset = { (float)gPlayerWidth / 2.0f, -2.0f };
 			if (posDelta.x < 0.0f) playerOffset.x *= -1.0f;
 			Vector2 rayStart = Vector2Add(player->Location, playerOffset);
 			Vector2 rayEnd = Vector2Add(rayStart, (Vector2){posDelta.x, 0.0f});
 			TraceResult hit = WorldTrace(gWorld, rayStart, rayEnd, 0, false);
 			if (hit.hasHit)
 			{
-				posDelta.x = copysign(hit.dist, posDelta.x);
+				posDelta.x = copysignf(hit.dist, posDelta.x);
 			}
 		}
 
@@ -610,19 +613,19 @@ void UpdatePlayer(GameState* state)
 		{
 			// moving down, raycast from the bottom player
 			Vector2 playerOffset = { 0 };
-			if (posDelta.y < 0.0f) playerOffset.y = -gPlayerHeight;
+			if (posDelta.y < 0.0f) playerOffset.y = (float) -gPlayerHeight;
 			Vector2 rayStart = Vector2Add(player->Location, playerOffset);
 			Vector2 rayEnd = Vector2Add(rayStart, (Vector2) { 0.0f, posDelta.y });
 			TraceResult hit = WorldTrace(gWorld, rayStart, rayEnd, 0, false);
 			if (hit.hasHit)
 			{
-				posDelta.y = copysign(hit.dist, posDelta.y);
+				posDelta.y = copysignf(hit.dist, posDelta.y);
 			}
 		}
 	}
 
 	//////////////////////////////////////////////////////////////////////////
-	// Move player according to desired delta (todo - collide with world!)
+	// Move player according to desired delta
 	player->Location = Vector2Add(player->Location, posDelta);
 
 
