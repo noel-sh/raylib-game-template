@@ -99,10 +99,10 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 
 				// check bounds
 				Rectangle instBounds = {
-					.x = instWorldX,
-					.y = instWorldY,
-					.width = (inst->cWid * grid_size),
-					.height = (inst->cHei * grid_size)
+					.x = (float)instWorldX,
+					.y = (float)instWorldY,
+					.width = (float)(inst->cWid * grid_size),
+					.height = (float)(inst->cHei * grid_size)
 				};
 
 				if (CheckCollisionRecs(rayBounds, instBounds))
@@ -150,19 +150,19 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 
 					if (dy == 0.0f)
 					{
-						incY = 0.0f;
+						incY = 0;
 						nextY = dt_dy;	// infinity
 					}
 					else if (rayEnd.y > rayStart.y)
 					{
 						incY = 1;
-						n += (int)floor(rayEnd.y) - y;
-						nextY = (floor(rayStart.y) + 1 - rayStart.y) * dt_dy;
+						n += (int)floorf(rayEnd.y) - y;
+						nextY = (floorf(rayStart.y) + 1.0f - rayStart.y) * dt_dy;
 					}
 					else
 					{
 						incY = -1;
-						n += y - (int)floor(rayEnd.y);
+						n += y - (int)floorf(rayEnd.y);
 						nextY = (rayStart.y - floorf(rayStart.y)) * dt_dy;
 					}
 
@@ -210,7 +210,7 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 							// Draw a small pink circle where the ray crosses a cell boundary
 							float worldx = (rayStart.x + dx * t) * gridF + instWorldX;
 							float worldy = (rayStart.y + dy * t) * gridF + instWorldY;
-							DrawCircle(worldx, worldy, 2, PINK);
+							DrawCircleV((Vector2){worldx, worldy}, 2.0f, PINK);
 						}
 
 						if (fabsf(nextY) < fabsf(nextX))
@@ -776,12 +776,12 @@ static void DrawTraceResult(TraceResult hit)
 
 	if (hit.hasHit)
 	{
-		DrawLine(hit.start.x, hit.start.y, hit.hitPos.x, hit.hitPos.y, RED);
-		DrawLine(hit.hitPos.x, hit.hitPos.y, hit.end.x, hit.end.y, YELLOW);
+		DrawLineV(hit.start, hit.hitPos, RED);
+		DrawLineV(hit.hitPos, hit.end, YELLOW);
 	}
 	else
 	{
-		DrawLine(hit.start.x, hit.start.y, hit.end.x, hit.end.y, YELLOW);
+		DrawLineV(hit.start, hit.end, YELLOW);
 	}
 }
 
