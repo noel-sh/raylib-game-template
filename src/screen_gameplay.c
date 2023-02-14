@@ -65,6 +65,7 @@ typedef struct TraceResult {
 
 static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 end, int depth, bool bDebugDraw)
 {
+	float rayLength = Vector2Distance(start, end);
 	Rectangle rayBounds = {
 		.x = start.x < end.x ? start.x : end.x,
 		.y = start.y < end.y ? start.y : end.y,
@@ -185,14 +186,14 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 								// or scan forward for the next change of value? Maybe both.
 
 								// We have a collision! Store if it is the closest collision.
-								float dist = t * gridF;
+								float dist = t * rayLength;
 								if (dist < result.dist)
 								{
 									result.hasHit = true;
-									result.dist = t * gridF;
+									result.dist = dist;
 									result.gridValue = cellValue;
 									result.hitPos = (Vector2){
-										(rayStart.x + dx * t)* gridF + instWorldX,
+										(rayStart.x + dx * t) * gridF + instWorldX,
 										(rayStart.y + dy * t) * gridF + instWorldY
 									};
 
@@ -588,6 +589,37 @@ void UpdatePlayer(GameState* state)
 		player->Velocity.y = gPlayerMaxFallSpeed;
 	}
 
+	//////////////////////////////////////////////////////////////////////////
+	// Collide desired posDelta with the world
+	{
+		if (fabsf(posDelta.x) > 0.0f)
+		{
+			// moving right, raycast from the right hand side of the player
+			Vector2 playerOffset = { gPlayerWidth / 2, -2 };
+			if (posDelta.x < 0.0f) playerOffset.x *= -1.0f;
+			Vector2 rayStart = Vector2Add(player->Location, playerOffset);
+			Vector2 rayEnd = Vector2Add(rayStart, (Vector2){posDelta.x, 0.0f});
+			TraceResult hit = WorldTrace(gWorld, rayStart, rayEnd, 0, false);
+			if (hit.hasHit)
+			{
+				posDelta.x = copysign(hit.dist, posDelta.x);
+			}
+		}
+
+		if (fabsf(posDelta.y) > 0.0f)
+		{
+			// moving down, raycast from the bottom player
+			Vector2 playerOffset = { 0 };
+			if (posDelta.y < 0.0f) playerOffset.y = -gPlayerHeight;
+			Vector2 rayStart = Vector2Add(player->Location, playerOffset);
+			Vector2 rayEnd = Vector2Add(rayStart, (Vector2) { 0.0f, posDelta.y });
+			TraceResult hit = WorldTrace(gWorld, rayStart, rayEnd, 0, false);
+			if (hit.hasHit)
+			{
+				posDelta.y = copysign(hit.dist, posDelta.y);
+			}
+		}
+	}
 
 	//////////////////////////////////////////////////////////////////////////
 	// Move player according to desired delta (todo - collide with world!)
@@ -645,7 +677,7 @@ static bool gDebugUI_Timeline = false;
 static void InitGameState()
 {
 	memset(gGameStates, 0, sizeof(gGameStates[0]));
-	gGameStates[0].Player.Location = (Vector2){ 24, -26 };
+	gGameStates[0].Player.Location = (Vector2){ 18 * 16, 10 * 16 };
 
 	gGameStateCount = 1;
 	gCurrentFrame = 0;
