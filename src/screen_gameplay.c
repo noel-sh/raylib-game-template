@@ -91,6 +91,9 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 				// assuming this int_grid is for collisions... idk how to know this!?
 				// game specific I guess
 
+				int grid_size = inst->grid_size;
+				float gridF = (float)grid_size;
+
 				int instWorldX = level->worldX + inst->px_offset_x;
 				int instWorldY = level->worldY + inst->px_offset_y;
 
@@ -98,166 +101,129 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 				Rectangle instBounds = {
 					.x = instWorldX,
 					.y = instWorldY,
-					.width = (inst->cWid * inst->grid_size),
-					.height = (inst->cHei * inst->grid_size)
+					.width = (inst->cWid * grid_size),
+					.height = (inst->cHei * grid_size)
 				};
 
 				if (CheckCollisionRecs(rayBounds, instBounds))
 				{
-					printf ("%s potential overlap detected\n", level->identifier);
+					// Walk along the ray, jumping to each cell boundary along the way
+					// Algorithm implemented from here
+					// http://playtechs.blogspot.com/2007/03/raytracing-on-grid.html
 
-					// walk from start to end checking each cell along the way
-					int xdir = (start.x < end.x) ? 1 : -1;
-					int ydir = (start.y < end.y) ? 1 : -1;
 
-					// get the relative cell references for start and end
-					int x1 = (int)(start.x - instWorldX) / inst->grid_size;
-					int x2 = (int)(end.x - instWorldX) / inst->grid_size;
-					int y1 = (int)(start.y - instWorldY) / inst->grid_size;
-					int y2 = (int)(end.y - instWorldY) / inst->grid_size;
 
-					// store first collision here
-					int cx = -1, cy = -1, cgrid = 0;
+					// transform world space ray into cell relative
+					Vector2 rayStart = { (start.x - (float)instWorldX) / gridF, (start.y - (float)instWorldY) / gridF };
+					Vector2 rayEnd = { (end.x - (float)instWorldX) / gridF, (end.y - (float)instWorldY) / gridF };
 
-					// walk in the longest axis and find the first colliding cell
-					if (abs(start.x - end.x) >= abs(start.y - end.y))
+					float dx = rayEnd.x - rayStart.x;
+					float dy = rayEnd.y - rayStart.y;
+					float dt_dx = 1.0f / dx;
+					float dt_dy = 1.0f / dy;
+
+					int x = (int)floorf(rayStart.x);
+					int y = (int)floorf(rayStart.y);
+					int n = 1;
+
+					int incX, incY;
+					float nextX, nextY;
+					float t = 0.0f;
+
+					if (dx == 0.0f)
 					{
-						// walk X
-						x2 += xdir;
-						int m_new = 2 * (y2 - y1);
-						int slope_error_new = m_new - (x2 - x1);
-						int y = y1;
-						for (int x = x1; x != x2; x += xdir)
-						{
-							// skip out of bounds cells
-							if (x < 0 || x >= inst->cWid || y < 0 || y >= inst->cHei) continue;
-
-							if (bDebugDraw) DrawRectangleLines(instWorldX + x * inst->grid_size, instWorldY + y * inst->grid_size, inst->grid_size, inst->grid_size, WHITE);
-
-							int c = x + y * inst->cWid;
-							if (inst->int_grid[c] != 0)
-							{
-								cx = x;
-								cy = y;
-								cgrid = inst->int_grid[c];
-								break;
-							}
-
-							slope_error_new += m_new;
-							if (slope_error_new >= 0) {
-								y += ydir;
-								slope_error_new -= 2 * (x2 - x1);
-							}
-						}
+						incX = 0;
+						nextX = dt_dx;	// infinity
+					}
+					else if (rayEnd.x > rayStart.x)
+					{
+						incX = 1;
+						n += (int)floorf(rayEnd.x) - x;
+						nextX = (floorf(rayStart.x) + 1 - rayStart.x) * dt_dx;
 					}
 					else
 					{
-						// walk Y
-						y2 += ydir;
-						int m_new = 2 * (x2 - x1);
-						int slope_error_new = m_new - (y2 - y1);
-						int x = x1;
-						for (int y = y1; y != y2; y += ydir)
-						{
-							// skip out of bounds cells
-							if (x < 0 || x >= inst->cWid || y < 0 || y >= inst->cHei) continue;
-
-							if (bDebugDraw) DrawRectangleLines(instWorldX + x * inst->grid_size, instWorldY + y * inst->grid_size, inst->grid_size, inst->grid_size, WHITE);
-
-							int c = x + y * inst->cWid;
-							if (inst->int_grid[c] != 0)
-							{
-								cx = x;
-								cy = y;
-								cgrid = inst->int_grid[c];
-								break;
-							}
-
-							slope_error_new += m_new;
-							if (slope_error_new >= 0) {
-								x += xdir;
-								slope_error_new -= 2 * (y2 - y1);
-							}
-						}
+						incX = -1;
+						n += x - (int)floorf(rayEnd.x);
+						nextX = (rayStart.x - floorf(rayStart.x)) * dt_dx;
 					}
 
-					if (cx != -1 && cy != -1)
+					if (dy == 0.0f)
 					{
-						// find accurate collision point
+						incY = 0.0f;
+						nextY = dt_dy;	// infinity
+					}
+					else if (rayEnd.y > rayStart.y)
+					{
+						incY = 1;
+						n += (int)floor(rayEnd.y) - y;
+						nextY = (floor(rayStart.y) + 1 - rayStart.y) * dt_dy;
+					}
+					else
+					{
+						incY = -1;
+						n += y - (int)floor(rayEnd.y);
+						nextY = (rayStart.y - floorf(rayStart.y)) * dt_dy;
+					}
 
-						// construct world space AABB for the cell and collide ray with it
-						// we know which direction the ray was headed so we can just check 2 lines not all 4
-
-						Vector2 tl = { instWorldX + cx * inst->grid_size, instWorldY + cy * inst->grid_size };
-						Vector2 bl = { instWorldX + cx * inst->grid_size, instWorldY + (cy + 1) * inst->grid_size };
-						Vector2 tr = { instWorldX + (cx + 1) * inst->grid_size, instWorldY + cy * inst->grid_size };
-						Vector2 br = { instWorldX + (cx + 1) * inst->grid_size, instWorldY + (cy + 1) * inst->grid_size };
-
-						Vector2 colPoint;
-						if (xdir > 0)
+					for (; n > 0; --n)
+					{
+						// ray might originate or terminate outside of the bounds so only check grid cell for valid cells.
+						// This could be improved by fast forwarding to the first cell in bounds, and terminating early as 
+						// soon as the ray leaves the bounds.
+						if (x >= 0 && x < inst->cWid && y >= 0 && y < inst->cHei)
 						{
-							// check left side
-							if (CheckCollisionLines(start, end, tl, bl, &colPoint))
+							int cellIdx = x + y * inst->cWid;
+							int cellValue = inst->int_grid[cellIdx];
+							if (cellValue != 0)
 							{
-								float dist = Vector2Distance(start, colPoint);
+								// TODO handle if the ray starts intersecting... could either return that case
+								// or scan forward for the next change of value? Maybe both.
+
+								// We have a collision! Store if it is the closest collision.
+								float dist = t * gridF;
 								if (dist < result.dist)
 								{
 									result.hasHit = true;
-									result.dist = dist;
-									result.hitPos = colPoint;
-									result.hitNormal = (Vector2){ -1, 0 };
-									result.gridValue = cgrid;
+									result.dist = t * gridF;
+									result.gridValue = cellValue;
+									result.hitPos = (Vector2){
+										(rayStart.x + dx * t)* gridF + instWorldX,
+										(rayStart.y + dy * t) * gridF + instWorldY
+									};
+
+									// TODO figure this out from which branch was taken last loop?
+									result.hitNormal = (Vector2) {0, -1};
 								}
+
+								// TODO we could stop the loop here but useful for now for debug draw purposes
 							}
+						}
+
+						if (bDebugDraw)
+						{
+							// Draw a rectangle around the current cell being checked
+							int x1 = x * grid_size + instWorldX;
+							int y1 = y * grid_size + instWorldY;
+							DrawRectangleLines(x1, y1, grid_size, grid_size, WHITE);
+
+							// Draw a small pink circle where the ray crosses a cell boundary
+							float worldx = (rayStart.x + dx * t) * gridF + instWorldX;
+							float worldy = (rayStart.y + dy * t) * gridF + instWorldY;
+							DrawCircle(worldx, worldy, 2, PINK);
+						}
+
+						if (fabsf(nextY) < fabsf(nextX))
+						{
+							y += incY;
+							t = fabsf(nextY);
+							nextY += dt_dy;
 						}
 						else
 						{
-							// check right side
-							if (CheckCollisionLines(start, end, tr, br, &colPoint))
-							{
-								float dist = Vector2Distance(start, colPoint);
-								if (dist < result.dist)
-								{
-									result.hasHit = true;
-									result.dist = dist;
-									result.hitPos = colPoint;
-									result.hitNormal = (Vector2){ 1, 0 };
-									result.gridValue = cgrid;
-								}
-							}
-						}
-
-						if (ydir > 0)
-						{
-							// check top side
-							if (CheckCollisionLines(start, end, tl, tr, &colPoint))
-							{
-								float dist = Vector2Distance(start, colPoint);
-								if (dist < result.dist)
-								{
-									result.hasHit = true;
-									result.dist = dist;
-									result.hitPos = colPoint;
-									result.hitNormal = (Vector2){ 0, -1 };
-									result.gridValue = cgrid;
-								}
-							}
-						}
-						else
-						{
-							// check bottom side
-							if (CheckCollisionLines(start, end, bl, br, &colPoint))
-							{
-								float dist = Vector2Distance(start, colPoint);
-								if (dist < result.dist)
-								{
-									result.hasHit = true;
-									result.dist = dist;
-									result.hitPos = colPoint;
-									result.hitNormal = (Vector2){ 0, 1 };
-									result.gridValue = cgrid;
-								}
-							}
+							x += incX;
+							t = fabsf(nextX);
+							nextX += dt_dx;
 						}
 					}
 				}
@@ -878,6 +844,12 @@ void InitGameplayScreen(void)
 
 	// setup initial gamestate
 	InitGameState();
+
+	// init mouse ray to something known so we can debug it easily
+	MouseRayHit = (TraceResult) {
+		.start = (Vector2) {0, 0},
+		.end = (Vector2) {127, 15}
+	};
 }
 
 
