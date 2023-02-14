@@ -54,6 +54,7 @@ static Aseprite gWorldSprites[16] = { 0 };
 typedef struct TraceResult {
 	Vector2 start;
 	Vector2 end;
+	int depth;
 	Vector2 hitPos;		// world position of the hit
 	Vector2 hitNormal;	// world normal of the surface that was hit
 	float dist;			// distance from Start where the hit occurred
@@ -62,7 +63,7 @@ typedef struct TraceResult {
 } TraceResult;
 
 
-static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 end, bool bDebugDraw)
+static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 end, int depth, bool bDebugDraw)
 {
 	Rectangle rayBounds = {
 		.x = start.x < end.x ? start.x : end.x,
@@ -74,6 +75,7 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 	TraceResult result = {
 		.start = start,
 		.end = end,
+		.depth = depth,
 		.hasHit = false,
 		.dist = FLT_MAX
 	};
@@ -83,6 +85,7 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 	for (int i = 0; i < count; ++i)
 	{
 		ldtk_level* level = ldtk_get_level(world, i);
+		if (level->worldDepth != depth) continue;
 		for (int j = 0; j < level->layer_instances_count; ++j)
 		{
 			ldtk_layer_instance* inst = &level->layer_instances[j];
@@ -475,7 +478,8 @@ void UpdatePlayer(GameState* state)
 	// for now collide with the y=0 plane
 	bool bIsGrounded = player->Location.y >= 0.0f;
 
-	//WorldTrace(gWorld, player->Location, Vector2Add(player->Location, (Vector2) { 0.0f, 100.0f }));
+	//TraceResult groundTrace = WorldTrace(gWorld, player->Location, Vector2Add(player->Location, (Vector2) { 0.0f, 100.0f }), false);
+	//bIsGrounded = groundTrace.hasHit && groundTrace.dist < 1.0f;
 
 	if (bIsGrounded)
 	{
@@ -772,7 +776,7 @@ static void DrawTraceResult(TraceResult hit)
 	// draw an arrow showing normal
 
 	// invoke the function with debug draw enabled
-	WorldTrace(gWorld, hit.start, hit.end, true);
+	WorldTrace(gWorld, hit.start, hit.end, hit.depth, true);
 
 	if (hit.hasHit)
 	{
@@ -847,8 +851,8 @@ void InitGameplayScreen(void)
 
 	// init mouse ray to something known so we can debug it easily
 	MouseRayHit = (TraceResult) {
-		.start = (Vector2) {0, 0},
-		.end = (Vector2) {127, 15}
+		.start = (Vector2) {264, 100},
+		.end = (Vector2) {264, 120}
 	};
 }
 
@@ -899,7 +903,7 @@ void UpdateGameplayScreen(void)
 		Vector2 start = GetScreenToWorld2D(gMouseRayStart, currentCamera);
 		Vector2 end = GetScreenToWorld2D(GetMousePosition(), currentCamera);
 
-		MouseRayHit = WorldTrace(gWorld, start, end, false);
+		MouseRayHit = WorldTrace(gWorld, start, end, worldDepthToShow, false);
 	}
 	gMouseRightDown = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
 
