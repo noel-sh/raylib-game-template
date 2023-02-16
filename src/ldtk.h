@@ -66,7 +66,7 @@ typedef struct ldtk_tile
 
 
 #if defined(__cplusplus)
-extern "C" {            // Prevents name mangling of functions
+extern "C" {
 #endif
 
 

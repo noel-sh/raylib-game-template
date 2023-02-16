@@ -27,6 +27,7 @@
 #include "screens.h"
 #include "ldtk.h"
 #include "raymath.h"
+#include "coll.h"
 
 #define RAYLIB_ASEPRITE_IMPLEMENTATION
 #include "raylib-aseprite.h"
@@ -48,36 +49,28 @@ static Aseprite gWorldSprites[16] = { 0 };
 
 
 //////////////////////////////////////////////////////////////////////////
-// Test area for collision functions!
+// Collision functions
 
 
-typedef struct TraceResult {
-	Vector2 start;
-	Vector2 end;
-	int depth;
-	Vector2 hitPos;		// world position of the hit
-	Vector2 hitNormal;	// world normal of the surface that was hit
-	float dist;			// distance from Start where the hit occurred
-	int gridValue;		// if we hit an int_grid cell, what was the value
-	bool hasHit;		// did the trace hit anything?
-} TraceResult;
-
-
-static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 end, int depth, bool bDebugDraw)
+// callback function to determine the grid cell contents when used for collisions
+static int ldtk_grid_lookup(void* ctx, int x, int y)
 {
-	float rayLength = Vector2Distance(start, end);
-	Rectangle rayBounds = {
-		.x = start.x < end.x ? start.x : end.x,
-		.y = start.y < end.y ? start.y : end.y,
-		.width = fabsf(start.x - end.x),
-		.height = fabsf(start.y - end.y)
+	ldtk_layer_instance* inst = ctx;
+	int i = x + inst->cWid * y;
+	return inst->int_grid[i];
+}
+
+// iterate the ldtk world and raycast against each collision layer to find the closest collision
+coll_trace_hit_t ldtk_trace_ray(struct ldtk_world* world, Vector2 start, Vector2 end, int depth)
+{
+	coll_ray_t ray = {
+		.start_x = start.x,
+		.start_y = start.y,
+		.end_x = end.x,
+		.end_y = end.y
 	};
 
-	TraceResult result = {
-		.start = start,
-		.end = end,
-		.depth = depth,
-		.hasHit = false,
+	coll_trace_hit_t result = {
 		.dist = FLT_MAX
 	};
 
@@ -92,147 +85,22 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 			ldtk_layer_instance* inst = &level->layer_instances[j];
 			if (inst->int_grid)
 			{
-				// assuming this int_grid is for collisions... idk how to know this!?
-				// game specific I guess
-
-				int grid_size = inst->grid_size;
-				float gridF = (float)grid_size;
-
-				int instWorldX = level->worldX + inst->px_offset_x;
-				int instWorldY = level->worldY + inst->px_offset_y;
-
-				// check bounds
-				Rectangle instBounds = {
-					.x = (float)instWorldX,
-					.y = (float)instWorldY,
-					.width = (float)(inst->cWid * grid_size),
-					.height = (float)(inst->cHei * grid_size)
+				coll_grid_t grid = {
+					.offset_x = (float)level->worldX + inst->px_offset_x,
+					.offset_y = (float)level->worldY + inst->px_offset_y,
+					.width = inst->cWid,
+					.height = inst->cHei,
+					.cell_size = (float)inst->grid_size,
+					.context = inst,
+					.cb_has_hit = ldtk_grid_lookup
 				};
 
-				if (CheckCollisionRecs(rayBounds, instBounds))
+				coll_trace_hit_t hit;
+				if (coll_ray_grid(grid, ray, &hit))
 				{
-					// Walk along the ray, jumping to each cell boundary along the way
-					// Algorithm implemented from here
-					// http://playtechs.blogspot.com/2007/03/raytracing-on-grid.html
-
-
-
-					// transform world space ray into cell relative
-					Vector2 rayStart = { (start.x - (float)instWorldX) / gridF, (start.y - (float)instWorldY) / gridF };
-					Vector2 rayEnd = { (end.x - (float)instWorldX) / gridF, (end.y - (float)instWorldY) / gridF };
-
-					float dx = rayEnd.x - rayStart.x;
-					float dy = rayEnd.y - rayStart.y;
-					float dt_dx = 1.0f / dx;
-					float dt_dy = 1.0f / dy;
-
-					int x = (int)floorf(rayStart.x);
-					int y = (int)floorf(rayStart.y);
-					int n = 1;
-
-					int incX, incY;
-					float nextX, nextY;
-					float t = 0.0f;
-					bool lastMoveWasHorizontal = true;
-
-					if (dx == 0.0f)
+					if (hit.dist < result.dist)
 					{
-						incX = 0;
-						nextX = dt_dx;	// infinity
-					}
-					else if (rayEnd.x > rayStart.x)
-					{
-						incX = 1;
-						n += (int)floorf(rayEnd.x) - x;
-						nextX = (floorf(rayStart.x) + 1 - rayStart.x) * dt_dx;
-					}
-					else
-					{
-						incX = -1;
-						n += x - (int)floorf(rayEnd.x);
-						nextX = (rayStart.x - floorf(rayStart.x)) * dt_dx;
-					}
-
-					if (dy == 0.0f)
-					{
-						incY = 0;
-						nextY = dt_dy;	// infinity
-					}
-					else if (rayEnd.y > rayStart.y)
-					{
-						incY = 1;
-						n += (int)floorf(rayEnd.y) - y;
-						nextY = (floorf(rayStart.y) + 1.0f - rayStart.y) * dt_dy;
-					}
-					else
-					{
-						incY = -1;
-						n += y - (int)floorf(rayEnd.y);
-						nextY = (rayStart.y - floorf(rayStart.y)) * dt_dy;
-					}
-
-					for (; n > 0; --n)
-					{
-						// ray might originate or terminate outside of the bounds so only check grid cell for valid cells.
-						// This could be improved by fast forwarding to the first cell in bounds, and terminating early as 
-						// soon as the ray leaves the bounds.
-						if (x >= 0 && x < inst->cWid && y >= 0 && y < inst->cHei)
-						{
-							int cellIdx = x + y * inst->cWid;
-							int cellValue = inst->int_grid[cellIdx];
-							if (cellValue != 0)
-							{
-								// TODO handle if the ray starts intersecting... could either return that case
-								// or scan forward for the next change of value? Maybe both.
-
-								// We have a collision! Store if it is the closest collision.
-								float dist = t * rayLength;
-								if (dist < result.dist)
-								{
-									result.hasHit = true;
-									result.dist = dist;
-									result.gridValue = cellValue;
-									result.hitPos = (Vector2){
-										(rayStart.x + dx * t) * gridF + instWorldX,
-										(rayStart.y + dy * t) * gridF + instWorldY
-									};
-
-									// calculate the surface normal from the direction we last stepped in
-									if (lastMoveWasHorizontal)	result.hitNormal = (Vector2){ (nextX < 0.0f) ? 1.0f : -1.0f, 0.0f };
-									else						result.hitNormal = (Vector2){ 0.0f, (nextY < 0.0f) ? 1.0f : -1.0f };
-								}
-
-								// TODO we could stop the loop here but useful for now for debug draw purposes
-							}
-						}
-
-						if (bDebugDraw)
-						{
-							// Draw a rectangle around the current cell being checked
-							int x1 = x * grid_size + instWorldX;
-							int y1 = y * grid_size + instWorldY;
-							DrawRectangleLines(x1, y1, grid_size, grid_size, WHITE);
-
-							// Draw a small pink circle where the ray crosses a cell boundary
-							float worldx = (rayStart.x + dx * t) * gridF + instWorldX;
-							float worldy = (rayStart.y + dy * t) * gridF + instWorldY;
-							DrawCircleV((Vector2){worldx, worldy}, 2.0f, PINK);
-						}
-
-						if (fabsf(nextY) < fabsf(nextX))
-						{
-							y += incY;
-							t = fabsf(nextY);
-							nextY += dt_dy;
-							lastMoveWasHorizontal = false;
-						}
-						else
-						{
-							x += incX;
-							t = fabsf(nextX);
-							nextX += dt_dx;
-							lastMoveWasHorizontal = true;
-						}
+						result = hit;
 					}
 				}
 			}
@@ -241,7 +109,6 @@ static TraceResult WorldTrace(struct ldtk_world* world, Vector2 start, Vector2 e
 
 	return result;
 }
-
 
 
 //----------------------------------------------------------------------------------
@@ -434,7 +301,7 @@ static float gPlayerMaxSpeedX = 2.0f;
 static float gPlayerMaxFallSpeed = 10.0f;
 
 // 2 is double jump
-static int gPlayerMaxJumpCount = 100;
+static int gPlayerMaxJumpCount = 2;
 
 // how many frames of coyote time
 static int gPlayerCoyoteTime = 3;
@@ -483,8 +350,8 @@ void UpdatePlayer(GameState* state)
 	// for now collide with the y=0 plane
 	bool bIsGrounded = player->Location.y >= 0.0f;
 
-	TraceResult groundTrace = WorldTrace(gWorld, player->Location, Vector2Add(player->Location, (Vector2) { 0.0f, 1.0f }), 0, false);
-	bIsGrounded = groundTrace.hasHit && groundTrace.dist < 1.0f;
+	coll_trace_hit_t groundTrace = ldtk_trace_ray(gWorld, player->Location, Vector2Add(player->Location, (Vector2) { 0.0f, 1.0f }), 0);
+	bIsGrounded = groundTrace.hit_value && groundTrace.dist == 0.0f;
 
 	if (bIsGrounded)
 	{
@@ -597,13 +464,12 @@ void UpdatePlayer(GameState* state)
 
 		if (fabsf(posDelta.x) > 0.0f)
 		{
-			// moving right, raycast from the right hand side of the player
 			Vector2 playerOffset = { (float)gPlayerWidth / 2.0f, -2.0f };
 			if (posDelta.x < 0.0f) playerOffset.x *= -1.0f;
 			Vector2 rayStart = Vector2Add(player->Location, playerOffset);
 			Vector2 rayEnd = Vector2Add(rayStart, (Vector2){posDelta.x, 0.0f});
-			TraceResult hit = WorldTrace(gWorld, rayStart, rayEnd, 0, false);
-			if (hit.hasHit)
+			coll_trace_hit_t hit = ldtk_trace_ray(gWorld, rayStart, rayEnd, 0);
+			if (hit.hit_value)
 			{
 				posDelta.x = copysignf(hit.dist, posDelta.x);
 			}
@@ -611,13 +477,12 @@ void UpdatePlayer(GameState* state)
 
 		if (fabsf(posDelta.y) > 0.0f)
 		{
-			// moving down, raycast from the bottom player
 			Vector2 playerOffset = { 0 };
 			if (posDelta.y < 0.0f) playerOffset.y = (float) -gPlayerHeight;
 			Vector2 rayStart = Vector2Add(player->Location, playerOffset);
 			Vector2 rayEnd = Vector2Add(rayStart, (Vector2) { 0.0f, posDelta.y });
-			TraceResult hit = WorldTrace(gWorld, rayStart, rayEnd, 0, false);
-			if (hit.hasHit)
+			coll_trace_hit_t hit = ldtk_trace_ray(gWorld, rayStart, rayEnd, 0);
+			if (hit.hit_value)
 			{
 				posDelta.y = copysignf(hit.dist, posDelta.y);
 			}
@@ -808,26 +673,28 @@ static void DrawPlayer(GameState state)
 }
 
 
-static void DrawTraceResult(TraceResult hit)
+static void DrawTraceResult(Vector2 start, Vector2 end)
 {
 	// draw a line from start to end
 	// draw a line from start to hit
 	// draw an arrow showing normal
 
 	// invoke the function with debug draw enabled
-	WorldTrace(gWorld, hit.start, hit.end, hit.depth, true);
+	coll_trace_hit_t hit = ldtk_trace_ray(gWorld, start, end, 0);
 
-	if (hit.hasHit)
+	if (hit.hit_value)
 	{
-		DrawLineV(hit.start, hit.hitPos, YELLOW);
-		DrawLineV(hit.hitPos, hit.end, RED);
+		Vector2 hitPos = { hit.hit_pos_x, hit.hit_pos_y };
+		DrawLineV(start, hitPos, YELLOW);
+		DrawLineV(hitPos, end, RED);
 
-		Vector2 normalRay = Vector2Scale(hit.hitNormal, 12.0f);
-		DrawLineV(hit.hitPos, Vector2Add(hit.hitPos, normalRay), GREEN);
+		float normalDisplayLength = 12.0f;
+		Vector2 normalRay = {hit.hit_normal_x * normalDisplayLength, hit.hit_normal_y * normalDisplayLength };
+		DrawLineV(hitPos, Vector2Add(hitPos, normalRay), GREEN);
 	}
 	else
 	{
-		DrawLineV(hit.start, hit.end, YELLOW);
+		DrawLineV(start, end, YELLOW);
 	}
 }
 
@@ -846,7 +713,9 @@ static Camera2D currentCamera = {0};
 
 static bool gMouseRightDown = false;
 static Vector2 gMouseRayStart;
-static TraceResult MouseRayHit = {0};
+static Vector2 gMouseRayWorldStart = {0};
+static Vector2 gMouseRayWorldEnd = { 0 };
+static coll_trace_hit_t gMouseRayHit = {0};
 
 // Gameplay Screen Initialization logic
 void InitGameplayScreen(void)
@@ -892,10 +761,8 @@ void InitGameplayScreen(void)
 	InitGameState();
 
 	// init mouse ray to something known so we can debug it easily
-	MouseRayHit = (TraceResult) {
-		.start = (Vector2) {264, 100},
-		.end = (Vector2) {264, 120}
-	};
+	gMouseRayWorldStart = (Vector2) {264, 100};
+	gMouseRayWorldEnd = (Vector2) {264, 120};
 }
 
 
@@ -942,10 +809,8 @@ void UpdateGameplayScreen(void)
 		}
 
 		// do raycast!
-		Vector2 start = GetScreenToWorld2D(gMouseRayStart, currentCamera);
-		Vector2 end = GetScreenToWorld2D(GetMousePosition(), currentCamera);
-
-		MouseRayHit = WorldTrace(gWorld, start, end, worldDepthToShow, false);
+		gMouseRayWorldStart = GetScreenToWorld2D(gMouseRayStart, currentCamera);
+		gMouseRayWorldEnd = GetScreenToWorld2D(GetMousePosition(), currentCamera);
 	}
 	gMouseRightDown = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
 
@@ -989,7 +854,7 @@ void DrawGameplayScreen(void)
 
 		DrawPlayer(gGameStates[gCurrentFrame]);
 
-		DrawTraceResult(MouseRayHit);
+		DrawTraceResult(gMouseRayWorldStart, gMouseRayWorldEnd);
 	EndMode2D();
 
 	DrawDebugUI();

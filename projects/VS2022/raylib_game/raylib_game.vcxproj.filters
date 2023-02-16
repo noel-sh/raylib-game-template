@@ -11,6 +11,7 @@
       <Filter>external</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\src\ldtk.c" />
+    <ClCompile Include="..\..\..\src\coll.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\src\screens.h" />

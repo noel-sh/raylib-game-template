@@ -359,6 +359,7 @@
     <ClInclude Include="..\..\..\src\screens.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\src\coll.c" />
     <ClCompile Include="..\..\..\src\external\parson.c" />
     <ClCompile Include="..\..\..\src\ldtk.c" />
     <ClCompile Include="..\..\..\src\raylib_game.c" />
