@@ -21,6 +21,15 @@ typedef struct coll_ray_t
 	float end_y;
 } coll_ray_t;
 
+// Represents an AABB specified by centre location and half width/height.
+typedef struct coll_aabb_t
+{
+	float x;
+	float y;
+	float half_w;
+	float half_h;
+} coll_aabb_t;
+
 typedef struct coll_trace_hit_t
 {
 	float hit_pos_x;
@@ -39,6 +48,8 @@ extern "C" {
 // raycast a line segment through a grid and return the closest hit
 int coll_ray_grid(coll_grid_t grid, coll_ray_t ray, coll_trace_hit_t* out_hit);
 
+// sweep an AABB through a grid and return the closest hit
+int coll_sweep_aabb_grid(coll_grid_t grid, coll_aabb_t aabb, float ray_x, float ray_y, coll_trace_hit_t* out_hit);
 
 #if defined(__cplusplus)
 }

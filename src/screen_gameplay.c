@@ -60,6 +60,7 @@ static int ldtk_grid_lookup(void* ctx, int x, int y)
 	return inst->int_grid[i];
 }
 
+
 // iterate the ldtk world and raycast against each collision layer to find the closest collision
 coll_trace_hit_t ldtk_trace_ray(struct ldtk_world* world, Vector2 start, Vector2 end, int depth)
 {
@@ -109,6 +110,51 @@ coll_trace_hit_t ldtk_trace_ray(struct ldtk_world* world, Vector2 start, Vector2
 
 	return result;
 }
+
+
+// iterate the ldtk world and raycast against each collision layer to find the closest collision
+coll_trace_hit_t ldtk_sweep_aabb(struct ldtk_world* world, coll_aabb_t aabb, Vector2 dir, int depth)
+{
+	coll_trace_hit_t result = {
+		.dist = FLT_MAX
+	};
+
+	// iterate all level instances and check which ones contain the bounding box
+	int count = ldtk_get_level_count(world);
+	for (int i = 0; i < count; ++i)
+	{
+		ldtk_level* level = ldtk_get_level(world, i);
+		if (level->worldDepth != depth) continue;
+		for (int j = 0; j < level->layer_instances_count; ++j)
+		{
+			ldtk_layer_instance* inst = &level->layer_instances[j];
+			if (inst->int_grid)
+			{
+				coll_grid_t grid = {
+					.offset_x = (float)level->worldX + inst->px_offset_x,
+					.offset_y = (float)level->worldY + inst->px_offset_y,
+					.width = inst->cWid,
+					.height = inst->cHei,
+					.cell_size = (float)inst->grid_size,
+					.context = inst,
+					.cb_has_hit = ldtk_grid_lookup
+				};
+
+				coll_trace_hit_t hit;
+				if (coll_sweep_aabb_grid(grid, aabb, dir.x, dir.y, &hit))
+				{
+					if (hit.dist < result.dist)
+					{
+						result = hit;
+					}
+				}
+			}
+		}
+	}
+
+	return result;
+}
+
 
 
 //----------------------------------------------------------------------------------
@@ -346,12 +392,18 @@ void UpdatePlayer(GameState* state)
 	//////////////////////////////////////////////////////////////////////////
 	// vertical movement
 
-	// TODO check if player is on the ground (raycast?)
-	// for now collide with the y=0 plane
-	bool bIsGrounded = player->Location.y >= 0.0f;
+	float halfW = gPlayerWidth / 2.0f;
+	float halfH = gPlayerHeight / 2.0f;
+	coll_aabb_t playerAABB = {
+		player->Location.x + halfW, player->Location.y - halfH,
+		halfW, halfH
+	};
 
-	coll_trace_hit_t groundTrace = ldtk_trace_ray(gWorld, player->Location, Vector2Add(player->Location, (Vector2) { 0.0f, 1.0f }), 0);
-	bIsGrounded = groundTrace.hit_value && groundTrace.dist == 0.0f;
+	// check if player is on the ground
+	coll_trace_hit_t groundTrace = ldtk_sweep_aabb(gWorld, playerAABB, (Vector2){0, 1}, 0);
+	bool bIsGrounded = groundTrace.hit_value && groundTrace.dist == 0.0f;
+
+	// TODO trace box down not just a ray...
 
 	if (bIsGrounded)
 	{
@@ -466,9 +518,7 @@ void UpdatePlayer(GameState* state)
 		{
 			Vector2 playerOffset = { (float)gPlayerWidth / 2.0f, -2.0f };
 			if (posDelta.x < 0.0f) playerOffset.x *= -1.0f;
-			Vector2 rayStart = Vector2Add(player->Location, playerOffset);
-			Vector2 rayEnd = Vector2Add(rayStart, (Vector2){posDelta.x, 0.0f});
-			coll_trace_hit_t hit = ldtk_trace_ray(gWorld, rayStart, rayEnd, 0);
+			coll_trace_hit_t hit = ldtk_sweep_aabb(gWorld, playerAABB, (Vector2) { posDelta.x, 0 }, 0);
 			if (hit.hit_value)
 			{
 				posDelta.x = copysignf(hit.dist, posDelta.x);
@@ -545,7 +595,7 @@ static bool gDebugUI_Timeline = false;
 static void InitGameState()
 {
 	memset(gGameStates, 0, sizeof(gGameStates[0]));
-	gGameStates[0].Player.Location = (Vector2){ 18 * 16, 10 * 16 };
+	gGameStates[0].Player.Location = (Vector2){ 8 * 16, 4 * 16 };
 
 	gGameStateCount = 1;
 	gCurrentFrame = 0;
@@ -680,13 +730,24 @@ static void DrawTraceResult(Vector2 start, Vector2 end)
 	// draw an arrow showing normal
 
 	// invoke the function with debug draw enabled
-	coll_trace_hit_t hit = ldtk_trace_ray(gWorld, start, end, 0);
 
+	coll_aabb_t aabb = {start.x, start.y, 25, 25};
+	Vector2 delta = Vector2Subtract(end, start);
+
+	coll_trace_hit_t hit = ldtk_sweep_aabb(gWorld, aabb, delta, 0);
 	if (hit.hit_value)
 	{
 		Vector2 hitPos = { hit.hit_pos_x, hit.hit_pos_y };
 		DrawLineV(start, hitPos, YELLOW);
 		DrawLineV(hitPos, end, RED);
+
+		DrawRectangleLinesEx((Rectangle) {
+			aabb.x - aabb.half_w, aabb.y - aabb.half_h, aabb.half_w * 2, aabb.half_h * 2
+		}, 1.0f, YELLOW);
+
+		DrawRectangleLinesEx((Rectangle) {
+			hitPos.x - aabb.half_w, hitPos.y - aabb.half_h, aabb.half_w * 2, aabb.half_h * 2
+		}, 1.0f, RED);
 
 		float normalDisplayLength = 12.0f;
 		Vector2 normalRay = {hit.hit_normal_x * normalDisplayLength, hit.hit_normal_y * normalDisplayLength };
@@ -695,6 +756,12 @@ static void DrawTraceResult(Vector2 start, Vector2 end)
 	else
 	{
 		DrawLineV(start, end, YELLOW);
+		DrawRectangleLinesEx((Rectangle) {
+			aabb.x - aabb.half_w, aabb.y - aabb.half_h, aabb.half_w * 2, aabb.half_h * 2
+		}, 1.0f, YELLOW);
+		DrawRectangleLinesEx((Rectangle) {
+			end.x - aabb.half_w, end.y - aabb.half_h, aabb.half_w * 2, aabb.half_h * 2
+		}, 1.0f, YELLOW);
 	}
 }
 

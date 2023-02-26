@@ -191,6 +191,7 @@
       <CompileAs>Default</CompileAs>
       <AdditionalIncludeDirectories>$(SolutionDir)..\..\src;$(SolutionDir)..\..\src\external;$(SolutionDir)..\..\..\raylib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -229,6 +230,7 @@
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;PLATFORM_DESKTOP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <CompileAs>Default</CompileAs>
       <AdditionalIncludeDirectories>$(SolutionDir)..\..\src;$(SolutionDir)..\..\src\external;$(SolutionDir)..\..\..\raylib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -279,6 +281,7 @@
       <RemoveUnreferencedCodeData>true</RemoveUnreferencedCodeData>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -329,6 +332,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)..\..\src;$(SolutionDir)..\..\src\external;$(SolutionDir)..\..\..\raylib\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>Default</CompileAs>
       <RemoveUnreferencedCodeData>true</RemoveUnreferencedCodeData>
+      <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
