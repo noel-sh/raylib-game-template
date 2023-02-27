@@ -202,36 +202,31 @@ int coll_sweep_aabb_grid(coll_grid_t grid, coll_aabb_t aabb, float ray_x, float 
 	coll_aabb_t sweepAABB = expand_aabb_by_aabb(aabb, (coll_aabb_t){aabb.x + ray_x, aabb.y + ray_y, aabb.half_w, aabb.half_h});
 	if (check_aabb_grid_bounds(grid, sweepAABB) == 0) return 0;
 
-
-	coll_ray_t ray = {aabb.x, aabb.y, aabb.x + ray_x, aabb.y + ray_y};
-
-	// offset ray so it casts from the leading edge
-	if (ray_x > 0.0f)
-	{
-		ray.start_x += aabb.half_w;
-		ray.end_x += aabb.half_w;
-	}
-	else if (ray_x < 0.0f)
-	{
-		ray.start_x -= aabb.half_w;
-		ray.end_x -= aabb.half_w;
-	}
-
-	if (ray_y > 0.0f)
-	{
-		ray.start_y += aabb.half_h;
-		ray.end_y += aabb.half_h;
-	}
-	else if (ray_x < 0.0f)
-	{
-		ray.start_y -= aabb.half_h;
-		ray.end_y -= aabb.half_h;
-	}
-
 	// possible hit so proceed with the raycast
 	coll_trace_hit_t result = {
 		.dist = FLT_MAX
 	};
+
+	coll_ray_t ray = {aabb.x, aabb.y, aabb.x + ray_x, aabb.y + ray_y};
+
+	float ray_offset_x, ray_offset_y;
+
+	// offset ray so it casts from the leading edge
+	if (fabsf(ray_x) > fabsf(ray_y))
+	{
+		ray_offset_x = copysignf(aabb.half_w, ray_x);
+		ray_offset_y = copysignf(aabb.half_h * (ray_y / ray_x), ray_y);
+	}
+	else
+	{
+		ray_offset_x = copysignf(aabb.half_w * (ray_x / ray_y), ray_x);
+		ray_offset_y = copysignf(aabb.half_h, ray_y);
+	}
+
+	ray.start_y += ray_offset_y;
+	ray.end_y += ray_offset_y;
+	ray.start_x += ray_offset_x;
+	ray.end_x += ray_offset_x;
 
 	float ray_length = coll_line_length(0.0f, 0.0f, ray_x, ray_y);
 
@@ -311,8 +306,8 @@ int coll_sweep_aabb_grid(coll_grid_t grid, coll_aabb_t aabb, float ray_x, float 
 					result.dist = dist;
 					result.hit_value = hit;
 
-					result.hit_pos_x = (ray_start_x + dx * t) * grid.cell_size + grid.offset_x;
-					result.hit_pos_y = (ray_start_y + dy * t) * grid.cell_size + grid.offset_y;
+					result.hit_pos_x = (ray_start_x + dx * t) * grid.cell_size + grid.offset_x - ray_offset_x;
+					result.hit_pos_y = (ray_start_y + dy * t) * grid.cell_size + grid.offset_y - ray_offset_y;
 
 					// calculate the surface normal from the direction we last stepped in
 					if (lastMoveWasHorizontal) {

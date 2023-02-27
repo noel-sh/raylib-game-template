@@ -395,7 +395,7 @@ void UpdatePlayer(GameState* state)
 	float halfW = gPlayerWidth / 2.0f;
 	float halfH = gPlayerHeight / 2.0f;
 	coll_aabb_t playerAABB = {
-		player->Location.x + halfW, player->Location.y - halfH,
+		player->Location.x, player->Location.y - halfH,
 		halfW, halfH
 	};
 
@@ -731,7 +731,7 @@ static void DrawTraceResult(Vector2 start, Vector2 end)
 
 	// invoke the function with debug draw enabled
 
-	coll_aabb_t aabb = {start.x, start.y, 25, 25};
+	coll_aabb_t aabb = {start.x, start.y, 16, 16};
 	Vector2 delta = Vector2Subtract(end, start);
 
 	coll_trace_hit_t hit = ldtk_sweep_aabb(gWorld, aabb, delta, 0);
