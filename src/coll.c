@@ -248,7 +248,6 @@ int coll_sweep_aabb_grid(coll_grid_t grid, coll_aabb_t aabb, float ray_x, float 
 	int incX, incY;
 	float nextX, nextY;
 	float t = 0.0f;
-	int lastMoveWasHorizontal = 1;
 
 	if (dx == 0.0f)
 	{
@@ -288,38 +287,70 @@ int coll_sweep_aabb_grid(coll_grid_t grid, coll_aabb_t aabb, float ray_x, float 
 
 	for (; n > 0; --n)
 	{
-		// TODO: Check entire edge of AABB against grid, not just the centre cell
+		int x_start = x, x_end = x + 1;
+		int y_start = y, y_end = y + 1;
 
-
-		// ray might originate or terminate outside of the bounds so only check grid cell for valid cells.
-		// This could be improved by fast forwarding to the first cell in bounds, and terminating early as 
-		// soon as the ray leaves the bounds.
-		if (x >= 0 && x < grid.width && y >= 0 && y < grid.height)
+		if (fabsf(nextY) < fabsf(nextX))
 		{
-			int hit = grid.cb_has_hit(grid.context, x, y);
-			if (hit != 0)
+			// moving Up/Down so check the full horizontal leading edge cells
+
+			float cell_x = ray_start_x + dx * t;
+			float aabbWidth = (aabb.half_w) / grid.cell_size;
+			float colStart = (cell_x - aabbWidth);
+			float colEnd = cell_x + aabbWidth;
+
+			x_start = (int)colStart;
+			x_end = (int)(colEnd + 0.99f);
+		}
+		else
+		{
+			// moving Left/Right so check vertical edge cells
+
+			float cell_y = ray_start_y + dy * t;
+			float aabbWidth = (aabb.half_h) / grid.cell_size;
+			float rowStart = (cell_y - aabbWidth);
+			float rowEnd = cell_y + aabbWidth;
+
+			y_start = (int)rowStart;
+			y_end = (int)(rowEnd + 0.99f);
+		}
+
+
+		for (int _y = y_start; _y < y_end; ++_y)
+		{
+			for (int _x = x_start; _x < x_end; ++_x)
 			{
-				// We have a collision! Store if it is the closest collision.
-				float dist = t * ray_length;
-				if (dist < result.dist)
+				// ray might originate or terminate outside of the bounds so only check grid cell for valid cells.
+				// This could be improved by fast forwarding to the first cell in bounds, and terminating early as 
+				// soon as the ray leaves the bounds.
+				if (_x >= 0 && _x < grid.width && _y >= 0 && _y < grid.height)
 				{
-					result.dist = dist;
-					result.hit_value = hit;
+					int hit = grid.cb_has_hit(grid.context, _x, _y);
+					if (hit != 0)
+					{
+						// We have a collision! Store if it is the closest collision.
+						float dist = t * ray_length;
+						if (dist < result.dist)
+						{
+							result.dist = dist;
+							result.hit_value = hit;
 
-					result.hit_pos_x = (ray_start_x + dx * t) * grid.cell_size + grid.offset_x - ray_offset_x;
-					result.hit_pos_y = (ray_start_y + dy * t) * grid.cell_size + grid.offset_y - ray_offset_y;
+							result.hit_pos_x = (ray_start_x + dx * t) * grid.cell_size + grid.offset_x - ray_offset_x;
+							result.hit_pos_y = (ray_start_y + dy * t) * grid.cell_size + grid.offset_y - ray_offset_y;
 
-					// calculate the surface normal from the direction we last stepped in
-					if (lastMoveWasHorizontal) {
-						result.hit_normal_x = (nextX < 0.0f) ? 1.0f : -1.0f;
-					}
-					else {
-						result.hit_normal_y = (nextY < 0.0f) ? 1.0f : -1.0f;
+							// calculate the surface normal from the direction we last stepped in
+							if (fabsf(nextX) < fabsf(nextY)) {
+								result.hit_normal_x = (nextX < 0.0f) ? 1.0f : -1.0f;
+							}
+							else {
+								result.hit_normal_y = (nextY < 0.0f) ? 1.0f : -1.0f;
+							}
+						}
+
+						// we traced from start, so the first hit is the closest and we can terminate now
+						goto trace_done;
 					}
 				}
-
-				// we traced from start, so the first hit is the closest and we can terminate now
-				goto trace_done;
 			}
 		}
 
@@ -328,42 +359,17 @@ int coll_sweep_aabb_grid(coll_grid_t grid, coll_aabb_t aabb, float ray_x, float 
 			y += incY;
 			t = fabsf(nextY);
 			nextY += dt_dy;
-			lastMoveWasHorizontal = 0;
 		}
 		else
 		{
 			x += incX;
 			t = fabsf(nextX);
 			nextX += dt_dx;
-			lastMoveWasHorizontal = 1;
 		}
 	}
 
 trace_done:
 	*out_hit = result;
 	return result.hit_value; 
-}
-
-
-
-
-
-int coll_sweep_circle_grid(coll_grid_t grid, coll_ray_t ray, float radius, coll_trace_hit_t* out_hit)
-{
-	// how to do this?
-	// cast multiple rays
-	// narrow down the likely cells
-	// check circle against aabbs, or specifically the 'leading' 2 edges of the AABB as line segments
-
-	// STATIC circle to static line collision
-	// find closest point on line and compare distance to radius
-
-	// MOVING circle to static line
-	// https://ericleong.me/research/circle-line/
-	// ??? complicated!
-
-	// maybe approximate/brute force is ok
-
-	return 0;
 }
 

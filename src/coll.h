@@ -32,8 +32,10 @@ typedef struct coll_aabb_t
 
 typedef struct coll_trace_hit_t
 {
+	// position of the moving object when it collided
 	float hit_pos_x;
 	float hit_pos_y;
+	// the surface normal of the hit object
 	float hit_normal_x;
 	float hit_normal_y;
 	float dist;
@@ -50,6 +52,7 @@ int coll_ray_grid(coll_grid_t grid, coll_ray_t ray, coll_trace_hit_t* out_hit);
 
 // sweep an AABB through a grid and return the closest hit
 int coll_sweep_aabb_grid(coll_grid_t grid, coll_aabb_t aabb, float ray_x, float ray_y, coll_trace_hit_t* out_hit);
+
 
 #if defined(__cplusplus)
 }

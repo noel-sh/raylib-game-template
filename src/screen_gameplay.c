@@ -35,7 +35,6 @@
 #define RAYGUI_IMPLEMENTATION
 #include "external/raygui.h"
 
-
 #include <stdio.h>
 #include <float.h>
 
@@ -319,9 +318,9 @@ typedef struct GameState
 // some play related config variables - where best to keep these? in a struct?
 
 // player width
-static int gPlayerWidth = 16;
+static int gPlayerWidth = 12;
 // player height
-static int gPlayerHeight = 24;
+static int gPlayerHeight = 20;
 // max height of jump if player holds the jump button
 static float gPlayerJumpHeight = 32.0f;
 // how many frames to reach peak height?
@@ -731,7 +730,7 @@ static void DrawTraceResult(Vector2 start, Vector2 end)
 
 	// invoke the function with debug draw enabled
 
-	coll_aabb_t aabb = {start.x, start.y, 16, 16};
+	coll_aabb_t aabb = {start.x, start.y, (float)gPlayerWidth / 2.0f, (float)gPlayerHeight / 2.0f};
 	Vector2 delta = Vector2Subtract(end, start);
 
 	coll_trace_hit_t hit = ldtk_sweep_aabb(gWorld, aabb, delta, 0);

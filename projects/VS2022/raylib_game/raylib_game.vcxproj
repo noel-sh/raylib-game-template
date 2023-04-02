@@ -355,6 +355,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\src\coll.h" />
     <ClInclude Include="..\..\..\src\external\cute_aseprite.h" />
     <ClInclude Include="..\..\..\src\external\parson.h" />
     <ClInclude Include="..\..\..\src\external\raygui.h" />

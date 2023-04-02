@@ -28,6 +28,7 @@
     <ClInclude Include="..\..\..\src\external\raygui.h">
       <Filter>external</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\src\coll.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\..\src\raylib_game.rc" />
